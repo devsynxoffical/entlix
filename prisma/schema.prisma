@@ -1,0 +1,92 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model MonitoringGroup {
+  id             String          @id @default(uuid())
+  userId         String?
+  user           User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name           String
+  keywords       String          // Stored as semicolon-separated string
+  region         String
+  status         String          @default("ACTIVE") // ACTIVE, PAUSED
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  advertisements Advertisement[]
+}
+
+model Advertisement {
+  id               String          @id @default(uuid())
+  groupId          String
+  group            MonitoringGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  metaAdId         String          // Original Meta advertisement identifier if available
+  advertiserName   String
+  advertiserLink   String?
+  adText           String?
+  adCreativeUrl    String?
+  matchingKeyword  String
+  region           String
+  startDate        DateTime?
+  firstDetectedAt  DateTime        @default(now())
+  lastDetectedAt   DateTime        @default(now())
+  status           String          @default("ACTIVE")
+  classification   String          // NEW, EXISTING
+  sourceLink       String?
+  
+  @@unique([groupId, metaAdId])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id              String            @id @default(cuid())
+  name            String?
+  email           String?           @unique
+  emailVerified   DateTime?
+  image           String?
+  password        String?
+  defaultRegion   String?           @default("Global")
+  emailAlerts     Boolean           @default(true)
+  metaAccessToken String?
+  accounts        Account[]
+  sessions        Session[]
+  monitoringGroups MonitoringGroup[]
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}

@@ -2,8 +2,7 @@ import { resolveSourceLink } from './adCreative';
 import { triggerWebhookAlerts } from './webhook';
 
 type AlertPayload = {
-  to: string[];
-  cc: string[];
+  recipients: string[];
   subject: string;
   html: string;
 };
@@ -16,76 +15,47 @@ function parseEmailList(raw: string | undefined | null): string[] {
     .filter((e) => e.includes('@'));
 }
 
-/** Primary TO + CC list from env (ALERT_EMAILS / ALERT_CC_EMAILS / ADMIN_EMAIL). */
-export function getAlertRecipients(): { to: string[]; cc: string[] } {
-  // Free-tier Resend: TO must be your verified Resend account email
-  const toList = parseEmailList(process.env.ALERT_TO_EMAIL || process.env.ADMIN_EMAIL);
-  const configured = parseEmailList(process.env.ALERT_EMAILS);
-  const extraCc = parseEmailList(process.env.ALERT_CC_EMAILS);
+/** Flat recipient list — each address gets its own separate email (no CC). */
+export function getAlertRecipients(): string[] {
+  const fromEnv = [
+    ...parseEmailList(process.env.ALERT_TO_EMAIL),
+    ...parseEmailList(process.env.ALERT_EMAILS),
+    ...parseEmailList(process.env.ALERT_CC_EMAILS), // legacy: treated as separate To, not CC
+    ...parseEmailList(process.env.ADMIN_EMAIL),
+  ];
 
-  const defaultTo = 'hassanaliin9class@gmail.com';
-  const defaultCc = ['ahmadadsmanager@gmail.com', 'rankmoraoffical@gmail.com'];
+  const defaults = [
+    'hassanaliin9class@gmail.com',
+    'ahmadadsmanager@gmail.com',
+    'rankmoraoffical@gmail.com',
+  ];
 
-  const to = toList[0] || configured[0] || defaultTo;
-
-  // Everyone else goes in CC (never duplicate the TO address)
-  const cc = Array.from(
-    new Set([
-      ...configured.filter((e) => e !== to),
-      ...extraCc,
-      ...(configured.length ? [] : defaultCc),
-      ...toList.slice(1),
-    ])
-  ).filter((e) => e !== to);
-
-  return { to: [to], cc };
+  const list = fromEnv.length > 0 ? fromEnv : defaults;
+  // Verified free-tier inbox first so it always gets mail even if others fail
+  const preferred = 'hassanaliin9class@gmail.com';
+  const unique = Array.from(new Set(list));
+  unique.sort((a, b) => {
+    if (a === preferred) return -1;
+    if (b === preferred) return 1;
+    return a.localeCompare(b);
+  });
+  return unique;
 }
 
 async function deliverEmail(payload: AlertPayload): Promise<{ sent: boolean; provider: string; error?: string; sentTo?: string[] }> {
   const from = process.env.EMAIL_FROM || 'Entiix Alerts <onboarding@resend.dev>';
   const resendKey = process.env.RESEND_API_KEY;
-  const allRecipients = Array.from(new Set([...payload.to, ...payload.cc]));
 
   if (!resendKey) {
     console.warn('⚠️ No email provider configured. Set RESEND_API_KEY to deliver alerts.');
     return { sent: false, provider: 'none', error: 'No email provider configured' };
   }
 
-  // Prefer a single message with TO + CC
-  try {
-    const body: Record<string, unknown> = {
-      from,
-      to: payload.to,
-      subject: payload.subject,
-      html: payload.html,
-    };
-    if (payload.cc.length > 0) body.cc = payload.cc;
-
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${resendKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json().catch(() => ({}));
-
-    if (res.ok) {
-      return { sent: true, provider: 'resend', sentTo: allRecipients };
-    }
-
-    console.warn('Resend TO+CC send failed, falling back (TO-only then per-recipient):', data?.message || res.status);
-  } catch (error: any) {
-    console.warn('Resend TO+CC error, falling back:', error?.message);
-  }
-
-  // Free tier: send TO first (verified inbox) so delivery always works
   const sentTo: string[] = [];
   const errors: string[] = [];
-  const ordered = [...payload.to, ...payload.cc.filter((e) => !payload.to.includes(e))];
 
-  for (const to of ordered) {
+  // Always send separately — one Resend API call per recipient (no CC)
+  for (const to of payload.recipients) {
     try {
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
@@ -102,11 +72,14 @@ async function deliverEmail(payload: AlertPayload): Promise<{ sent: boolean; pro
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        console.error(`Resend failed for ${to}:`, data);
         errors.push(`${to}: ${data?.message || `HTTP ${res.status}`}`);
       } else {
+        console.log(`✅ Sent separate alert to ${to}`);
         sentTo.push(to);
       }
     } catch (error: any) {
+      console.error(`Resend error for ${to}:`, error);
       errors.push(`${to}: ${error?.message || 'network error'}`);
     }
   }
@@ -146,8 +119,8 @@ export async function sendBulkScanAlert(opts: {
     return { sent: false, skipped: true, reason: 'emailAlerts disabled' };
   }
 
-  const { to, cc } = getAlertRecipients();
-  if (to.length === 0) {
+  const recipients = getAlertRecipients();
+  if (recipients.length === 0) {
     console.warn('⚠️ No alert recipients configured.');
     return { sent: false, recipients: [] };
   }
@@ -186,8 +159,7 @@ export async function sendBulkScanAlert(opts: {
       : '';
 
   const alertPayload: AlertPayload = {
-    to,
-    cc,
+    recipients,
     subject: `🚨 Entiix: ${count} new competitor ad${count === 1 ? '' : 's'} found`,
     html: `
       <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;max-width:720px;margin:0 auto;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;background:#ffffff;">
@@ -214,7 +186,7 @@ export async function sendBulkScanAlert(opts: {
           ${moreNote}
         </div>
         <div style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:14px 24px;text-align:center;font-size:12px;color:#94a3b8;">
-          To: ${to.join(', ')}${cc.length ? ` · CC: ${cc.join(', ')}` : ''}
+          Sent separately to: ${recipients.join(', ')}
         </div>
       </div>
     `,
@@ -222,7 +194,7 @@ export async function sendBulkScanAlert(opts: {
 
   console.log('====================================');
   console.log(`📧 BULK SCAN ALERT — ${count} new ad(s)`);
-  console.log(`To: ${to.join(', ')} | CC: ${cc.join(', ') || '(none)'}`);
+  console.log(`Recipients (separate emails): ${recipients.join(', ')}`);
   console.log(`Subject: ${alertPayload.subject}`);
   console.log('====================================');
 

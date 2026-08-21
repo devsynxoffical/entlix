@@ -21,8 +21,8 @@ export default function LandingPage() {
 
           <div className="flex items-center gap-3">
             <Link href="/auth/signin" className="text-sm font-semibold text-slate-600 hover:text-purple-600 transition-colors hidden sm:block">Sign In</Link>
-            <Link href="/auth/register" className="btn btn-primary text-sm px-4 py-2 shadow-lg shadow-purple-500/20">
-              Get Started Free
+            <Link href="/auth/signin" className="btn btn-primary text-sm px-4 py-2 shadow-lg shadow-purple-500/20">
+              Sign In
             </Link>
           </div>
         </div>
@@ -57,8 +57,8 @@ export default function LandingPage() {
             </p>
 
             <div className="flex flex-col sm:flex-row justify-center items-center gap-4 mb-10">
-              <Link href="/auth/register" className="btn btn-primary text-base py-3.5 px-8 w-full sm:w-auto shadow-xl shadow-purple-500/30 rounded-xl font-bold flex items-center justify-center gap-2">
-                Start Monitoring Free <ArrowRight size={18} />
+              <Link href="/auth/signin" className="btn btn-primary text-base py-3.5 px-8 w-full sm:w-auto shadow-xl shadow-purple-500/30 rounded-xl font-bold flex items-center justify-center gap-2">
+                Open Dashboard <ArrowRight size={18} />
               </Link>
               <Link href="/auth/signin" className="btn btn-secondary text-base py-3.5 px-8 w-full sm:w-auto rounded-xl font-semibold">
                 Sign In to Dashboard
@@ -240,11 +240,11 @@ export default function LandingPage() {
           <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
             {[
               {
-                name: 'Starter', price: 'Free', period: 'forever', cta: 'Get Started Free', link: '/auth/register', primary: false,
+                name: 'Starter', price: 'Free', period: 'forever', cta: 'Sign In', link: '/auth/signin', primary: false,
                 features: ['3 Monitoring Groups', 'Up to 100 Ads/month', 'UK & US regions', 'Email Alerts', 'Basic Dashboard']
               },
               {
-                name: 'Pro', price: '$49', period: '/ month', cta: 'Start Pro Trial', link: '/auth/register', primary: true,
+                name: 'Pro', price: '$49', period: '/ month', cta: 'Sign In', link: '/auth/signin', primary: true,
                 features: ['Unlimited Groups', 'Unlimited Ads', 'All Regions', 'Priority Email Alerts', 'Advanced Analytics', 'API Access', 'Priority Support']
               }
             ].map(plan => (
@@ -278,7 +278,7 @@ export default function LandingPage() {
           <div className="max-w-2xl mx-auto text-center">
             <h2 className="text-3xl sm:text-5xl font-extrabold text-slate-900 mb-4">Ready to spy smarter?</h2>
             <p className="text-slate-600 text-lg mb-8">Join hundreds of growth teams using Entiix to get the competitive edge.</p>
-            <Link href="/auth/register" className="btn btn-primary text-lg py-4 px-10 rounded-xl shadow-2xl shadow-purple-500/30 inline-flex items-center gap-2 font-bold">
+            <Link href="/auth/signin" className="btn btn-primary text-lg py-4 px-10 rounded-xl shadow-2xl shadow-purple-500/30 inline-flex items-center gap-2 font-bold">
               Start Free Today <ArrowRight size={20} />
             </Link>
           </div>
@@ -302,7 +302,7 @@ export default function LandingPage() {
                 <li><a href="#features" className="hover:text-white transition-colors">Features</a></li>
                 <li><a href="#pricing" className="hover:text-white transition-colors">Pricing</a></li>
                 <li><a href="#how" className="hover:text-white transition-colors">How It Works</a></li>
-                <li><Link href="/auth/register" className="hover:text-white transition-colors">Get Started</Link></li>
+                <li><Link href="/auth/signin" className="hover:text-white transition-colors">Sign In</Link></li>
               </ul>
             </div>
             <div>

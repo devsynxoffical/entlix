@@ -26,17 +26,20 @@ model Advertisement {
   group            MonitoringGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
   metaAdId         String          // Original Meta advertisement identifier if available
   advertiserName   String
+  advertiserLogo   String?         // Real Facebook Page profile picture URL
   advertiserLink   String?
   adText           String?
   adCreativeUrl    String?
   matchingKeyword  String
   region           String
+  whatsappContact  String?         // Extracted WhatsApp number or wa.me link
   startDate        DateTime?
   firstDetectedAt  DateTime        @default(now())
   lastDetectedAt   DateTime        @default(now())
   status           String          @default("ACTIVE")
   classification   String          // NEW, EXISTING
   sourceLink       String?
+  isFavorite       Boolean         @default(false)
   
   @@unique([groupId, metaAdId])
 }

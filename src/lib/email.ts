@@ -1,16 +1,20 @@
 import { MonitoringGroup, Advertisement } from '@prisma/client';
 
 export async function sendEmailAlert(group: any, ad: any) {
-  const recipientEmail = group.user?.email || 'subscriber@entiix.com';
+  const userEmail = group.user?.email || 'subscriber@entiix.com';
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin@entiix.com';
   
+  // Recipients list: notify both user and admin
+  const recipients = Array.from(new Set([userEmail, adminEmail].filter(Boolean)));
+
   const alertPayload = {
-    to: recipientEmail,
-    subject: `🚨 New Meta Ad Alert [${ad.matchingKeyword.toUpperCase()}]: ${ad.advertiserName}`,
+    recipients,
+    subject: `🚨 [NEW COMPETITOR AD DETECTED] ${ad.matchingKeyword.toUpperCase()}: ${ad.advertiserName}`,
     html: `
       <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; background: #ffffff;">
         <div style="background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%); padding: 24px; text-align: center; color: white;">
           <h1 style="margin: 0; font-size: 24px; font-weight: 800; tracking-tight: -0.02em;">Entiix Intelligence</h1>
-          <p style="margin: 6px 0 0 0; font-size: 14px; opacity: 0.9;">New Competitive Meta Ad Detected</p>
+          <p style="margin: 6px 0 0 0; font-size: 14px; opacity: 0.9;">Real-Time Meta Competitor Ad Detection</p>
         </div>
 
         <div style="padding: 24px; color: #0f172a;">
@@ -38,33 +42,44 @@ export async function sendEmailAlert(group: any, ad: any) {
               <td style="padding: 8px 0; font-weight: 600; color: #64748b;">Target Region:</td>
               <td style="padding: 8px 0; font-weight: 700; color: #0f172a;">${ad.region}</td>
             </tr>
+            ${ad.whatsappContact ? `
+              <tr>
+                <td style="padding: 8px 0; font-weight: 600; color: #64748b;">WhatsApp Lead Contact:</td>
+                <td style="padding: 8px 0; font-weight: 700; color: #16a34a;">${ad.whatsappContact}</td>
+              </tr>
+            ` : ''}
           </table>
 
           ${ad.sourceLink ? `
-            <a href="${ad.sourceLink}" target="_blank" style="display: block; text-align: center; background: #7c3aed; color: #ffffff; font-weight: 700; text-decoration: none; padding: 12px 24px; border-radius: 10px; font-size: 14px;">
+            <a href="${ad.sourceLink}" target="_blank" style="display: block; text-align: center; background: #7c3aed; color: #ffffff; font-weight: 700; text-decoration: none; padding: 12px 24px; border-radius: 10px; font-size: 14px; margin-bottom: 12px;">
               Inspect Ad in Meta Ad Library &rarr;
+            </a>
+          ` : ''}
+
+          ${ad.whatsappContact ? `
+            <a href="https://wa.me/${ad.whatsappContact.replace(/[^0-9]/g, '')}" target="_blank" style="display: block; text-align: center; background: #16a34a; color: #ffffff; font-weight: 700; text-decoration: none; padding: 12px 24px; border-radius: 10px; font-size: 14px;">
+              💬 Direct WhatsApp Chat with Advertiser &rarr;
             </a>
           ` : ''}
         </div>
 
         <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px 24px; text-align: center; font-size: 12px; color: #94a3b8;">
-          You are receiving this email because real-time alerts are active for <strong>${group.name}</strong> on Entiix.
+          Dual Alert sent to User (${userEmail}) and Admin (${adminEmail}).
         </div>
       </div>
     `
   };
 
   console.log('====================================');
-  console.log(`📧 EMAIL ALERT TRIGGERED FOR GROUP: ${group.name}`);
-  console.log(`To: ${alertPayload.to}`);
+  console.log(`📧 DUAL EMAIL ALERT TRIGGERED FOR GROUP: ${group.name}`);
+  console.log(`Recipients: ${recipients.join(', ')}`);
   console.log(`Subject: ${alertPayload.subject}`);
   console.log(`Advertiser: ${ad.advertiserName}`);
-  console.log(`Region: ${ad.region}`);
+  console.log(`WhatsApp Contact: ${ad.whatsappContact || 'N/A'}`);
   console.log(`Date Detected: ${new Date(ad.firstDetectedAt).toLocaleString()}`);
-  console.log(`Link: ${ad.sourceLink || 'N/A'}`);
   console.log('====================================');
 
-  // Simulate notification delay
+  // Simulate network delay
   await new Promise(resolve => setTimeout(resolve, 300));
   return alertPayload;
 }

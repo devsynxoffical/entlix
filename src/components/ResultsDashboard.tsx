@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import AdCard from './AdCard';
-import { Search, Filter, Loader2, RefreshCw, AlertCircle, Sparkles } from 'lucide-react';
+import { Search, Filter, Loader2, RefreshCw, AlertCircle, Download, Star } from 'lucide-react';
 
 export default function ResultsDashboard() {
   const [groups, setGroups] = useState<any[]>([]);
@@ -11,7 +11,7 @@ export default function ResultsDashboard() {
   const [loading, setLoading] = useState(true);
   const [adsLoading, setAdsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState('ALL');
+  const [filterType, setFilterType] = useState('ALL'); // ALL, NEW, EXISTING, FAVORITE
 
   useEffect(() => {
     fetch('/api/groups')
@@ -43,16 +43,52 @@ export default function ResultsDashboard() {
       .finally(() => setAdsLoading(false));
   };
 
+  const handleFavoriteToggle = (id: string, isFav: boolean) => {
+    setAds(prev => prev.map(a => a.id === id ? { ...a, isFavorite: isFav } : a));
+  };
+
   const filteredAds = ads.filter(ad => {
     const q = searchQuery.toLowerCase();
     const matchesSearch = !q ||
       ad.advertiserName?.toLowerCase().includes(q) ||
       ad.adText?.toLowerCase().includes(q) ||
       ad.matchingKeyword?.toLowerCase().includes(q) ||
-      ad.region?.toLowerCase().includes(q);
-    const matchesFilter = filterType === 'ALL' || ad.classification === filterType;
+      ad.region?.toLowerCase().includes(q) ||
+      ad.whatsappContact?.toLowerCase().includes(q);
+
+    let matchesFilter = true;
+    if (filterType === 'NEW') matchesFilter = ad.classification === 'NEW';
+    else if (filterType === 'EXISTING') matchesFilter = ad.classification === 'EXISTING';
+    else if (filterType === 'FAVORITE') matchesFilter = !!ad.isFavorite;
+
     return matchesSearch && matchesFilter;
   });
+
+  // Export filtered ad leads to CSV
+  const exportToCSV = () => {
+    if (filteredAds.length === 0) return;
+
+    const headers = ['Advertiser Name', 'Classification', 'Matching Keyword', 'Region', 'WhatsApp Contact', 'Ad Text', 'Detected Date', 'Source Link'];
+    const rows = filteredAds.map(ad => [
+      `"${(ad.advertiserName || '').replace(/"/g, '""')}"`,
+      `"${ad.classification || ''}"`,
+      `"${(ad.matchingKeyword || '').replace(/"/g, '""')}"`,
+      `"${(ad.region || '').replace(/"/g, '""')}"`,
+      `"${ad.whatsappContact || ''}"`,
+      `"${(ad.adText || '').replace(/"/g, '""')}"`,
+      `"${new Date(ad.firstDetectedAt).toLocaleString()}"`,
+      `"${ad.sourceLink || ''}"`
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Entiix_Meta_Ad_Leads_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   if (loading) {
     return (
@@ -96,7 +132,7 @@ export default function ResultsDashboard() {
             <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text" 
-              placeholder="Search ads, advertisers, keywords..."
+              placeholder="Search ads, WhatsApp contacts..."
               className="input-field text-sm py-2 pl-9"
               style={{ minWidth: '220px' }}
               value={searchQuery}
@@ -106,16 +142,26 @@ export default function ResultsDashboard() {
           <div className="relative">
             <Filter size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <select
-              className="input-field text-sm py-2 pl-9"
+              className="input-field text-sm py-2 pl-9 font-medium"
               value={filterType}
               onChange={e => setFilterType(e.target.value)}
             >
               <option value="ALL">All Status</option>
               <option value="NEW">New Ads Only</option>
               <option value="EXISTING">Existing Baseline</option>
+              <option value="FAVORITE">⭐ Bookmarked Favorites</option>
             </select>
           </div>
-          <button onClick={reload} className="btn btn-secondary text-sm py-2 px-3 gap-1.5" title="Refresh Ads Feed">
+          <button 
+            onClick={exportToCSV}
+            disabled={filteredAds.length === 0}
+            className="btn btn-secondary text-sm py-2 px-3 gap-1.5"
+            title="Export Lead List to CSV/Excel"
+          >
+            <Download size={14} className="text-purple-600" />
+            <span className="hidden sm:inline">Export CSV</span>
+          </button>
+          <button onClick={reload} className="btn btn-secondary text-sm py-2 px-3 gap-1.5" title="Refresh Feed">
             <RefreshCw size={14} className={adsLoading ? 'animate-spin text-purple-600' : ''} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
@@ -126,7 +172,7 @@ export default function ResultsDashboard() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-sm text-slate-600 font-semibold">
-            {adsLoading ? 'Syncing feed...' : `${filteredAds.length} ad${filteredAds.length !== 1 ? 's' : ''} tracked`}
+            {adsLoading ? 'Syncing feed...' : `${filteredAds.length} ad${filteredAds.length !== 1 ? 's' : ''} found`}
           </span>
           {filterType !== 'ALL' && (
             <span className="text-xs bg-purple-100 text-purple-700 px-2.5 py-0.5 rounded-full font-bold">
@@ -135,7 +181,7 @@ export default function ResultsDashboard() {
           )}
         </div>
         <span className="text-xs text-slate-400 font-medium hidden sm:block">
-          Click any card to inspect full creative details
+          Click any card for full details & WhatsApp contact
         </span>
       </div>
 
@@ -146,7 +192,7 @@ export default function ResultsDashboard() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredAds.length > 0
-            ? filteredAds.map(ad => <AdCard key={ad.id} ad={ad} />)
+            ? filteredAds.map(ad => <AdCard key={ad.id} ad={ad} onFavoriteToggle={handleFavoriteToggle} />)
             : (
               <div className="col-span-full glass-card py-16 text-center">
                 <Search size={32} className="mx-auto mb-3 text-slate-300" />

@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { ExternalLink, Clock, Tag, MapPin, Copy, Check, Eye, X, ShieldAlert } from 'lucide-react';
+import { ExternalLink, Clock, Tag, MapPin, Copy, Check, Eye, X, MessageSquare, Star } from 'lucide-react';
 
-export default function AdCard({ ad }: { ad: any }) {
+export default function AdCard({ ad, onFavoriteToggle }: { ad: any; onFavoriteToggle?: (id: string, isFav: boolean) => void }) {
   const isNew = ad.classification === 'NEW';
   const [showModal, setShowModal] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isFav, setIsFav] = useState(!!ad.isFavorite);
 
   const copyLink = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -17,35 +18,67 @@ export default function AdCard({ ad }: { ad: any }) {
     }
   };
 
+  const toggleFavorite = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newFavState = !isFav;
+    setIsFav(newFavState);
+    try {
+      await fetch(`/api/ads/${ad.id}/favorite`, { method: 'POST' });
+      if (onFavoriteToggle) onFavoriteToggle(ad.id, newFavState);
+    } catch {
+      setIsFav(!newFavState);
+    }
+  };
+
+  const whatsappCleanNumber = ad.whatsappContact ? ad.whatsappContact.replace(/[^0-9]/g, '') : null;
+  const whatsappUrl = whatsappCleanNumber ? `https://wa.me/${whatsappCleanNumber}` : null;
+
   return (
     <>
       <div 
         onClick={() => setShowModal(true)}
-        className="glass-card overflow-hidden flex flex-col justify-between border border-slate-200/70 hover:border-purple-300 transition-all shadow-sm hover:shadow-md cursor-pointer group"
+        className="glass-card overflow-hidden flex flex-col justify-between border border-slate-200/70 hover:border-purple-300 transition-all shadow-sm hover:shadow-md cursor-pointer group relative"
       >
         <div>
           {/* Header bar */}
           <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-            <div className="flex items-center gap-2">
-              <span className={`badge ${isNew ? 'badge-new' : 'badge-existing'}`}>
-                {ad.classification}
-              </span>
-              <span className="text-sm text-slate-800 font-bold truncate max-w-[150px] group-hover:text-purple-600 transition-colors">
+            <div className="flex items-center gap-2.5 min-w-0">
+              {ad.advertiserLogo ? (
+                <img src={ad.advertiserLogo} alt="Logo" className="w-7 h-7 rounded-full object-cover border border-slate-200 shrink-0" />
+              ) : (
+                <div className="w-7 h-7 rounded-full bg-purple-100 text-purple-700 font-bold text-xs flex items-center justify-center shrink-0">
+                  {ad.advertiserName ? ad.advertiserName.charAt(0).toUpperCase() : 'A'}
+                </div>
+              )}
+              <span className="text-xs text-slate-800 font-bold truncate max-w-[130px] group-hover:text-purple-600 transition-colors">
                 {ad.advertiserName}
               </span>
+              <span className={`badge shrink-0 ${isNew ? 'badge-new' : 'badge-existing'}`}>
+                {ad.classification}
+              </span>
             </div>
-            {ad.sourceLink && (
-              <a 
-                href={ad.sourceLink} 
-                target="_blank" 
-                rel="noopener noreferrer" 
-                onClick={(e) => e.stopPropagation()}
-                className="text-slate-400 hover:text-purple-600 transition-colors p-1"
-                title="View Ad in Meta Library"
+
+            <div className="flex items-center gap-1 shrink-0">
+              <button 
+                onClick={toggleFavorite}
+                className={`p-1.5 rounded-lg transition-colors ${isFav ? 'text-amber-500 bg-amber-50' : 'text-slate-300 hover:text-amber-400'}`}
+                title={isFav ? 'Bookmarked in Favorites' : 'Add to Favorites'}
               >
-                <ExternalLink size={15} />
-              </a>
-            )}
+                <Star size={15} className={isFav ? 'fill-amber-400' : ''} />
+              </button>
+              {ad.sourceLink && (
+                <a 
+                  href={ad.sourceLink} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-slate-400 hover:text-purple-600 transition-colors p-1.5"
+                  title="View Ad in Meta Library"
+                >
+                  <ExternalLink size={15} />
+                </a>
+              )}
+            </div>
           </div>
           
           {/* Content area */}
@@ -55,7 +88,7 @@ export default function AdCard({ ad }: { ad: any }) {
                 <img src={ad.adCreativeUrl} alt="Ad Creative" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                 <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/20 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
                   <span className="bg-white/90 text-slate-800 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-md">
-                    <Eye size={14} /> Quick Preview
+                    <Eye size={14} /> Full Details
                   </span>
                 </div>
               </div>
@@ -68,6 +101,20 @@ export default function AdCard({ ad }: { ad: any }) {
             <p className="text-xs leading-relaxed text-slate-600 line-clamp-3 mb-4 font-normal">
               {ad.adText || "No ad description available for this placement."}
             </p>
+
+            {/* WhatsApp Quick Lead Button */}
+            {whatsappUrl && (
+              <a
+                href={whatsappUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="w-full mb-3 btn bg-emerald-600 hover:bg-emerald-700 text-white text-xs py-2 px-3 rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-sm shadow-emerald-500/20"
+              >
+                <MessageSquare size={14} />
+                <span>Chat on WhatsApp ({ad.whatsappContact})</span>
+              </a>
+            )}
           </div>
         </div>
         
@@ -101,17 +148,29 @@ export default function AdCard({ ad }: { ad: any }) {
             {/* Modal Header */}
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
               <div className="flex items-center gap-3">
+                {ad.advertiserLogo ? (
+                  <img src={ad.advertiserLogo} alt="Logo" className="w-8 h-8 rounded-full object-cover border border-slate-200" />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-700 font-bold text-xs flex items-center justify-center">
+                    {ad.advertiserName ? ad.advertiserName.charAt(0).toUpperCase() : 'A'}
+                  </div>
+                )}
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 leading-tight">{ad.advertiserName}</h3>
+                  <span className="text-[11px] text-slate-400 font-medium">Meta Ad ID: {ad.metaAdId}</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
                 <span className={`badge ${isNew ? 'badge-new' : 'badge-existing'}`}>
                   {ad.classification}
                 </span>
-                <h3 className="text-lg font-bold text-slate-900">{ad.advertiserName}</h3>
+                <button 
+                  onClick={() => setShowModal(false)}
+                  className="text-slate-400 hover:text-slate-700 p-1 rounded-lg"
+                >
+                  <X size={20} />
+                </button>
               </div>
-              <button 
-                onClick={() => setShowModal(false)}
-                className="text-slate-400 hover:text-slate-700 p-1 rounded-lg"
-              >
-                <X size={20} />
-              </button>
             </div>
 
             {/* Modal Body */}
@@ -123,8 +182,8 @@ export default function AdCard({ ad }: { ad: any }) {
               )}
 
               <div>
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Ad Copy & Headline</h4>
-                <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl text-sm leading-relaxed text-slate-800">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Ad Copy & Headline Description</h4>
+                <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl text-sm leading-relaxed text-slate-800 whitespace-pre-wrap">
                   {ad.adText || "No description provided."}
                 </div>
               </div>
@@ -147,26 +206,41 @@ export default function AdCard({ ad }: { ad: any }) {
 
             {/* Modal Footer */}
             <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row justify-between items-center gap-3">
-              <button
-                onClick={copyLink}
-                disabled={!ad.sourceLink}
-                className="btn btn-secondary text-xs py-2 px-4 gap-2 w-full sm:w-auto"
-              >
-                {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                <span>{copied ? 'Link Copied!' : 'Copy Meta Ad Link'}</span>
-              </button>
-
-              {ad.sourceLink && (
-                <a
-                  href={ad.sourceLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn btn-primary text-xs py-2 px-5 gap-2 w-full sm:w-auto shadow-md shadow-purple-500/20"
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  onClick={copyLink}
+                  disabled={!ad.sourceLink}
+                  className="btn btn-secondary text-xs py-2 px-3 gap-1.5 flex-1 sm:flex-none"
                 >
-                  <span>Open in Meta Ad Library</span>
-                  <ExternalLink size={14} />
-                </a>
-              )}
+                  {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                  <span>{copied ? 'Link Copied!' : 'Copy Meta Ad Link'}</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                {whatsappUrl && (
+                  <a
+                    href={whatsappUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn bg-emerald-600 hover:bg-emerald-700 text-white text-xs py-2 px-4 gap-1.5 font-bold shadow-md shadow-emerald-500/20"
+                  >
+                    <MessageSquare size={14} />
+                    <span>WhatsApp Lead</span>
+                  </a>
+                )}
+                {ad.sourceLink && (
+                  <a
+                    href={ad.sourceLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-primary text-xs py-2 px-4 gap-1.5 shadow-md shadow-purple-500/20 font-bold"
+                  >
+                    <span>Open Meta Ad Library</span>
+                    <ExternalLink size={14} />
+                  </a>
+                )}
+              </div>
             </div>
           </div>
         </div>

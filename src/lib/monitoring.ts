@@ -192,7 +192,7 @@ export async function runInitialBaseline(groupId: string) {
       startDate: new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000),
       firstDetectedAt: new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000),
       classification: 'EXISTING',
-      sourceLink: `https://www.facebook.com/ads/library/?id=${Math.floor(100000000 + Math.random() * 900000000)}`
+      sourceLink: null, // Demo baseline — no fake Meta Library id
     });
   }
 
@@ -320,9 +320,7 @@ export async function detectNewAds(groupId: string): Promise<any[]> {
         whatsappContact: extractWhatsAppContact(text),
         startDate: new Date(),
         classification: 'NEW',
-        sourceLink: `https://www.facebook.com/ads/library/?id=${Math.abs(
-          Array.from(simId).reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 0)
-        )}`,
+        sourceLink: null, // Demo simulation — Meta Library link only for live Meta archive ids
       });
     }
   }

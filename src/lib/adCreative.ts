@@ -72,11 +72,30 @@ export function resolveAdCreativeUrl(
   return getCreativeForKeyword(matchingKeyword || 'default');
 }
 
+/** Real Meta Ads Library archive IDs are long numeric strings. */
+export function isRealMetaAdId(metaAdId: string | null | undefined): boolean {
+  if (!metaAdId) return false;
+  const id = String(metaAdId).trim();
+  // Reject sim_/meta_ad_/new_ad_ and short random placeholders
+  if (!/^\d{10,}$/.test(id)) return false;
+  return true;
+}
+
+export function isSimulatedAd(metaAdId: string | null | undefined): boolean {
+  if (!metaAdId) return true;
+  const id = String(metaAdId).trim().toLowerCase();
+  return (
+    id.startsWith('sim_') ||
+    id.startsWith('meta_ad_') ||
+    id.startsWith('new_ad_') ||
+    id.startsWith('meta_api_') ||
+    !isRealMetaAdId(id)
+  );
+}
+
 /** Public Ad Library permalink — works in a browser without Graph API tokens. */
 export function publicMetaLibraryUrl(metaAdId: string | null | undefined): string | null {
-  if (!metaAdId) return null;
-  // Ignore mock/simulated ids that aren't real Meta archive ids
-  if (!/^\d+$/.test(String(metaAdId).trim())) return null;
+  if (!isRealMetaAdId(metaAdId)) return null;
   return `https://www.facebook.com/ads/library/?id=${encodeURIComponent(String(metaAdId).trim())}`;
 }
 
@@ -101,33 +120,40 @@ export function extractMetaAdIdFromUrl(url: string | null | undefined): string |
   try {
     const parsed = new URL(url);
     const fromQuery = parsed.searchParams.get('id');
-    if (fromQuery && /^\d+$/.test(fromQuery)) return fromQuery;
+    if (fromQuery && isRealMetaAdId(fromQuery)) return fromQuery;
   } catch {
     // fall through
   }
-  const match = url.match(/[?&]id=(\d+)/);
+  const match = url.match(/[?&]id=(\d{10,})/);
   return match?.[1] || null;
 }
 
-/** Safe browser link for "Open Live Ad" / "Meta Library" / Copy Link. */
+/**
+ * Safe browser link for "Open Live Ad" / "Meta Library".
+ * Demo/simulated ads never get a Meta Library URL (fake ids show "ad doesn't exist").
+ */
 export function resolveSourceLink(
   sourceLink: string | null | undefined,
   metaAdId?: string | null
 ): string | null {
-  const fromId = publicMetaLibraryUrl(metaAdId);
-  if (fromId) return fromId;
+  // Only real Meta archive ids open in Ad Library
+  if (isRealMetaAdId(metaAdId)) {
+    return publicMetaLibraryUrl(metaAdId);
+  }
+
+  // If metaAdId is simulated, ignore any stored facebook.com/ads/library fake link
+  if (isSimulatedAd(metaAdId)) {
+    return null;
+  }
 
   if (!sourceLink) return null;
   if (isPrivateMetaSnapshotUrl(sourceLink)) {
-    const extracted = extractMetaAdIdFromUrl(sourceLink);
-    return publicMetaLibraryUrl(extracted);
+    return publicMetaLibraryUrl(extractMetaAdIdFromUrl(sourceLink));
   }
 
-  // Already a public library URL
   if (sourceLink.includes('facebook.com/ads/library')) {
-    const extracted = extractMetaAdIdFromUrl(sourceLink);
-    return publicMetaLibraryUrl(extracted) || sourceLink.split('&access_token=')[0];
+    return publicMetaLibraryUrl(extractMetaAdIdFromUrl(sourceLink));
   }
 
-  return sourceLink;
+  return null;
 }

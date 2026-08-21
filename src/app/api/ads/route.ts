@@ -60,11 +60,26 @@ export async function GET(req: Request) {
       })
     );
 
-    const safeAds = repaired.map((ad) => ({
-      ...ad,
-      adCreativeUrl: resolveAdCreativeUrl(ad.adCreativeUrl, ad.matchingKeyword),
-      sourceLink: resolveSourceLink(ad.sourceLink, ad.metaAdId),
-    }));
+    const safeAds = repaired.map((ad) => {
+      const safeSource = resolveSourceLink(ad.sourceLink, ad.metaAdId);
+      return {
+        ...ad,
+        adCreativeUrl: resolveAdCreativeUrl(ad.adCreativeUrl, ad.matchingKeyword),
+        // Clear fake Meta Library URLs so UI never opens dead links
+        sourceLink: safeSource,
+      };
+    });
+
+    // Persist clearing of fake library links for demo ads
+    await Promise.all(
+      safeAds
+        .filter((ad, i) => repaired[i].sourceLink && !ad.sourceLink)
+        .map((ad) =>
+          prisma.advertisement
+            .update({ where: { id: ad.id }, data: { sourceLink: null } })
+            .catch(() => null)
+        )
+    );
 
     return NextResponse.json(safeAds);
   } catch (error) {

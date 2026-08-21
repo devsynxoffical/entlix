@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import AdCard from './AdCard';
-import { resolveAdCreativeUrl, resolveSourceLink } from '@/lib/adCreative';
+import { resolveAdCreativeUrl, resolveSourceLink, isSimulatedAd } from '@/lib/adCreative';
 import { 
   Search, Filter, Loader2, RefreshCw, AlertCircle, Download, 
   X, ExternalLink, Copy, Check, MessageSquare, Tag, MapPin, 
@@ -149,6 +149,7 @@ export default function ResultsDashboard() {
   const selectedLiveUrl = selectedAd
     ? resolveSourceLink(selectedAd.sourceLink, selectedAd.metaAdId)
     : null;
+  const selectedIsDemo = selectedAd ? isSimulatedAd(selectedAd.metaAdId) : false;
 
   const filteredAds = ads.filter(ad => {
     const q = searchQuery.toLowerCase();
@@ -447,7 +448,7 @@ export default function ResultsDashboard() {
                         {selectedAd.matchingKeyword ? `${selectedAd.matchingKeyword.toUpperCase()} Offer` : 'Special Promo'}
                       </span>
                     </div>
-                    {selectedLiveUrl && (
+                    {selectedLiveUrl ? (
                       <a
                         href={selectedLiveUrl}
                         target="_blank"
@@ -457,7 +458,11 @@ export default function ResultsDashboard() {
                         <span>Open Live Ad</span>
                         <ExternalLink size={13} />
                       </a>
-                    )}
+                    ) : selectedIsDemo ? (
+                      <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1.5 rounded-lg shrink-0">
+                        Demo preview · not in Meta Library
+                      </span>
+                    ) : null}
                   </div>
                 </div>
               ) : (

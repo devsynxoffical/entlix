@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { ExternalLink, Tag, MapPin, Star, MessageSquare, Eye, Globe, ImageOff } from 'lucide-react';
-import { resolveAdCreativeUrl, resolveSourceLink } from '@/lib/adCreative';
+import { resolveAdCreativeUrl, resolveSourceLink, isSimulatedAd } from '@/lib/adCreative';
 
 export default function AdCard({
   ad,
@@ -16,6 +16,7 @@ export default function AdCard({
   onFavoriteToggle: (id: string, isFav: boolean) => void;
 }) {
   const isNew = ad.classification === 'NEW';
+  const isDemo = isSimulatedAd(ad.metaAdId);
   const whatsappCleanNumber = ad.whatsappContact ? ad.whatsappContact.replace(/[^0-9]/g, '') : null;
   const whatsappUrl = whatsappCleanNumber ? `https://wa.me/${whatsappCleanNumber}` : null;
   const liveAdUrl = resolveSourceLink(ad.sourceLink, ad.metaAdId);
@@ -60,15 +61,22 @@ export default function AdCard({
               </div>
             )}
             <div className="flex flex-col min-w-0 flex-1">
-              <div className="flex items-center gap-2 min-w-0">
+              <div className="flex items-center gap-2 min-w-0 flex-wrap">
                 <span className="text-xs text-slate-900 font-bold truncate group-hover:text-purple-600 transition-colors">
                   {ad.advertiserName}
                 </span>
                 <span className={`badge shrink-0 ${isNew ? 'badge-new' : 'badge-existing'}`}>
                   {ad.classification}
                 </span>
+                {isDemo && (
+                  <span className="text-[10px] font-bold uppercase tracking-wide bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-md shrink-0">
+                    Demo
+                  </span>
+                )}
               </div>
-              <span className="text-[10px] text-slate-400 font-medium">Sponsored</span>
+              <span className="text-[10px] text-slate-400 font-medium">
+                {isDemo ? 'Preview ad · click card to inspect' : 'Sponsored · click to inspect'}
+              </span>
             </div>
           </div>
 

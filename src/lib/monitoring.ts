@@ -1,42 +1,22 @@
 import prisma from './db';
 import { sendEmailAlert } from './email';
+import { getCreativeForKeyword } from './adCreative';
 
-// High quality category image presets for dynamic fallback
-const CATEGORY_IMAGES: Record<string, string[]> = {
-  saas: [
-    'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=600&q=80',
-    'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=600&q=80',
-    'https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&w=600&q=80'
-  ],
-  ecom: [
-    'https://images.unsplash.com/photo-1472851294608-062f824d29cc?auto=format&fit=crop&w=600&q=80',
-    'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?auto=format&fit=crop&w=600&q=80',
-    'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=600&q=80'
-  ],
-  dental: [
-    'https://images.unsplash.com/photo-1606811841689-23dfddce3e95?auto=format&fit=crop&w=600&q=80',
-    'https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&w=600&q=80'
-  ],
-  realestate: [
-    'https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=600&q=80',
-    'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=600&q=80'
-  ],
-  default: [
-    'https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=600&q=80',
-    'https://images.unsplash.com/photo-1432888498266-38ffec3eaf0a?auto=format&fit=crop&w=600&q=80',
-    'https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=600&q=80'
-  ]
-};
-
-function getCreativeForKeyword(keyword: string): string {
-  const k = keyword.toLowerCase();
-  let pool = CATEGORY_IMAGES.default;
-  if (k.includes('dent') || k.includes('teeth') || k.includes('clinic')) pool = CATEGORY_IMAGES.dental;
-  else if (k.includes('saas') || k.includes('soft') || k.includes('app') || k.includes('lead') || k.includes('automation')) pool = CATEGORY_IMAGES.saas;
-  else if (k.includes('estate') || k.includes('house') || k.includes('home') || k.includes('property')) pool = CATEGORY_IMAGES.realestate;
-  else if (k.includes('shop') || k.includes('store') || k.includes('brand') || k.includes('sale')) pool = CATEGORY_IMAGES.ecom;
-
-  return pool[Math.floor(Math.random() * pool.length)];
+function resolveMetaCountry(region: string): string {
+  const r = (region || '').trim().toUpperCase();
+  const map: Record<string, string> = {
+    'UNITED KINGDOM': 'GB', UK: 'GB', GB: 'GB',
+    'UNITED STATES': 'US', USA: 'US', US: 'US',
+    CANADA: 'CA', CA: 'CA',
+    AUSTRALIA: 'AU', AU: 'AU',
+    INDIA: 'IN', IN: 'IN',
+    GERMANY: 'DE', DE: 'DE',
+    FRANCE: 'FR', FR: 'FR',
+    GLOBAL: 'US', ALL: 'US', WORLDWIDE: 'US',
+  };
+  if (map[r]) return map[r];
+  if (/^[A-Z]{2}$/.test(r)) return r;
+  return 'US';
 }
 
 function generateAdvertiserName(keyword: string): string {
@@ -84,10 +64,29 @@ function extractWhatsAppContact(text: string, captions: string[] = []): string |
 
 export async function fetchMetaAdLibraryAPI(searchTerms: string, region: string, accessToken: string) {
   try {
-    const fields = 'id,ad_creation_time,ad_creative_bodies,ad_creative_link_captions,page_id,page_name,ad_snapshot_url';
-    const countryParam = region.toUpperCase() === 'UNITED KINGDOM' || region === 'UK' ? 'GB' : region.toUpperCase() === 'UNITED STATES' || region === 'US' ? 'US' : 'ALL';
-    const url = `https://graph.facebook.com/v19.0/ads_archive?access_token=${accessToken}&search_terms=${encodeURIComponent(searchTerms)}&ad_type=ALL&ad_reached_countries=['${countryParam}']&fields=${fields}&limit=25`;
-    
+    const fields = [
+      'id',
+      'ad_creation_time',
+      'ad_creative_bodies',
+      'ad_creative_link_captions',
+      'ad_creative_link_titles',
+      'ad_creative_link_descriptions',
+      'page_id',
+      'page_name',
+      'ad_snapshot_url',
+      'publisher_platforms',
+    ].join(',');
+    const countryParam = resolveMetaCountry(region);
+    const url =
+      `https://graph.facebook.com/v19.0/ads_archive` +
+      `?access_token=${accessToken}` +
+      `&search_terms=${encodeURIComponent(searchTerms)}` +
+      `&ad_type=ALL` +
+      `&ad_reached_countries=['${countryParam}']` +
+      `&ad_active_status=ACTIVE` +
+      `&fields=${fields}` +
+      `&limit=25`;
+
     const response = await fetch(url);
     const data = await response.json();
 
@@ -198,7 +197,17 @@ export async function detectNewAds(groupId: string) {
         pageLogo = await fetchMetaPageLogo(metaItem.page_id, accessToken);
       }
 
-      const linkCaption = metaItem.ad_creative_link_captions?.[0] || null;
+      const linkCaption =
+        metaItem.ad_creative_link_captions?.[0] ||
+        metaItem.ad_creative_link_titles?.[0] ||
+        null;
+
+      // Meta never returns downloadable creative image URLs — only HTML snapshot pages.
+      // Store a displayable placeholder; keep the snapshot as sourceLink for "Open Live Ad".
+      const creativeUrl = getCreativeForKeyword(matchedKeyword);
+      const libraryLink =
+        metaItem.ad_snapshot_url ||
+        (metaItem.id ? `https://www.facebook.com/ads/library/?id=${metaItem.id}` : null);
 
       const newAdData = {
         metaAdId: metaItem.id || `meta_api_${Date.now()}_${Math.random().toString(36).substring(7)}`,
@@ -206,13 +215,13 @@ export async function detectNewAds(groupId: string) {
         advertiserLogo: pageLogo,
         advertiserLink: linkCaption,
         adText: adText,
-        adCreativeUrl: metaItem.ad_snapshot_url || getCreativeForKeyword(matchedKeyword),
+        adCreativeUrl: creativeUrl,
         matchingKeyword: matchedKeyword,
         region: group.region,
         whatsappContact: whatsapp,
         startDate: metaItem.ad_creation_time ? new Date(metaItem.ad_creation_time) : new Date(),
         classification: 'NEW',
-        sourceLink: metaItem.ad_snapshot_url || `https://www.facebook.com/ads/library/?id=${metaItem.id}`
+        sourceLink: libraryLink
       };
 
       const existing = await prisma.advertisement.findUnique({

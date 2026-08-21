@@ -16,11 +16,11 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="dashboard-layout animate-fade-in">
+    <div className="dashboard-layout">
       <Sidebar />
       <div className="main-content">
         <Topbar />
-        <main className="content-area">
+        <main className="content-area animate-fade-in">
           {children}
         </main>
       </div>

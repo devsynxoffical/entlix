@@ -1,6 +1,62 @@
 import prisma from './db';
-import { sendEmailAlert } from './email';
 import { getCreativeForKeyword } from './adCreative';
+
+/** Stable fingerprint to catch near-duplicate creatives (same page + same copy). */
+export function adContentFingerprint(advertiserName?: string | null, adText?: string | null): string {
+  const name = (advertiserName || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  const text = (adText || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .slice(0, 400);
+  return `${name}||${text}`;
+}
+
+function todayKey(): string {
+  const d = new Date();
+  return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(d.getUTCDate()).padStart(2, '0')}`;
+}
+
+/** Remove duplicate rows in a group (keep oldest). Same metaAdId or same content fingerprint. */
+export async function purgeDuplicateAds(groupId?: string): Promise<number> {
+  const ads = await prisma.advertisement.findMany({
+    where: groupId ? { groupId } : undefined,
+    orderBy: { firstDetectedAt: 'asc' },
+    select: {
+      id: true,
+      groupId: true,
+      metaAdId: true,
+      advertiserName: true,
+      adText: true,
+    },
+  });
+
+  const seenMeta = new Set<string>();
+  const seenContent = new Set<string>();
+  const toDelete: string[] = [];
+
+  for (const ad of ads) {
+    const metaKey = `${ad.groupId}::${ad.metaAdId}`;
+    const contentKey = `${ad.groupId}::${adContentFingerprint(ad.advertiserName, ad.adText)}`;
+
+    const metaDup = seenMeta.has(metaKey);
+    const contentDup = !!ad.adText && seenContent.has(contentKey);
+
+    if (metaDup || contentDup) {
+      toDelete.push(ad.id);
+      continue;
+    }
+
+    seenMeta.add(metaKey);
+    if (ad.adText) seenContent.add(contentKey);
+  }
+
+  if (toDelete.length === 0) return 0;
+
+  await prisma.advertisement.deleteMany({ where: { id: { in: toDelete } } });
+  console.log(`🧹 Purged ${toDelete.length} duplicate ad(s)${groupId ? ` in group ${groupId}` : ''}`);
+  return toDelete.length;
+}
 
 function resolveMetaCountry(region: string): string {
   const r = (region || '').trim().toUpperCase();
@@ -161,22 +217,23 @@ export async function runInitialBaseline(groupId: string) {
   }
 }
 
-export async function detectNewAds(groupId: string) {
+export async function detectNewAds(groupId: string): Promise<any[]> {
   const group = await prisma.monitoringGroup.findUnique({
-    where: { id: groupId }
+    where: { id: groupId },
   });
-  if (!group) return null;
+  if (!group) return [];
 
-  // Lookup associated user or default user
+  // Clean existing duplicates before inserting more
+  await purgeDuplicateAds(group.id);
+
   const gUserId = (group as any).userId;
-  const user = gUserId 
+  const user = gUserId
     ? await prisma.user.findUnique({ where: { id: gUserId } })
     : await prisma.user.findFirst();
 
-  const keywords = group.keywords.split(';').map(k => k.trim()).filter(Boolean);
+  const keywords = group.keywords.split(';').map((k) => k.trim()).filter(Boolean);
   const matchedKeyword = keywords[Math.floor(Math.random() * keywords.length)] || group.name;
 
-  // Try Meta Graph API if access token is configured
   const accessToken = user?.metaAccessToken || process.env.META_ACCESS_TOKEN;
   let liveAdsFromMeta = null;
 
@@ -184,14 +241,60 @@ export async function detectNewAds(groupId: string) {
     liveAdsFromMeta = await fetchMetaAdLibraryAPI(matchedKeyword, group.region, accessToken);
   }
 
-  let createdAds = [];
+  // Load existing meta ids + content fingerprints for this group (dedupe gate)
+  const existingAds = await prisma.advertisement.findMany({
+    where: { groupId: group.id },
+    select: { metaAdId: true, advertiserName: true, adText: true },
+  });
+  const existingMetaIds = new Set(existingAds.map((a) => a.metaAdId));
+  const existingFingerprints = new Set(
+    existingAds.map((a) => adContentFingerprint(a.advertiserName, a.adText))
+  );
+
+  const createdAds: any[] = [];
+  const batchFingerprints = new Set<string>();
+  const batchMetaIds = new Set<string>();
+
+  const tryCreate = async (newAdData: any) => {
+    const metaAdId = String(newAdData.metaAdId || '').trim();
+    if (!metaAdId) return;
+
+    const fp = adContentFingerprint(newAdData.advertiserName, newAdData.adText);
+
+    if (existingMetaIds.has(metaAdId) || batchMetaIds.has(metaAdId)) return;
+    if (fp && (existingFingerprints.has(fp) || batchFingerprints.has(fp))) return;
+
+    try {
+      const createdAd = await prisma.advertisement.create({
+        data: { ...newAdData, groupId: group.id, metaAdId },
+      });
+      createdAds.push(createdAd);
+      existingMetaIds.add(metaAdId);
+      batchMetaIds.add(metaAdId);
+      if (fp) {
+        existingFingerprints.add(fp);
+        batchFingerprints.add(fp);
+      }
+    } catch (error: any) {
+      // Unique constraint race — treat as duplicate, skip
+      if (error?.code === 'P2002') return;
+      throw error;
+    }
+  };
 
   if (liveAdsFromMeta && liveAdsFromMeta.length > 0) {
-    // Process live Meta Graph API items
     for (const metaItem of liveAdsFromMeta) {
-      const adText = metaItem.ad_creative_bodies?.[0] || metaItem.ad_creative_link_captions?.[0] || generateAdText(matchedKeyword, group.region);
-      const whatsapp = extractWhatsAppContact(adText, metaItem.ad_creative_link_captions || []);
-      
+      // Skip items without a real Meta archive id (random ids cause duplicates)
+      if (!metaItem.id) continue;
+
+      const adText =
+        metaItem.ad_creative_bodies?.[0] ||
+        metaItem.ad_creative_link_captions?.[0] ||
+        null;
+      if (!adText && !metaItem.page_name) continue;
+
+      const whatsapp = extractWhatsAppContact(adText || '', metaItem.ad_creative_link_captions || []);
+
       let pageLogo = null;
       if (metaItem.page_id && accessToken) {
         pageLogo = await fetchMetaPageLogo(metaItem.page_id, accessToken);
@@ -202,87 +305,44 @@ export async function detectNewAds(groupId: string) {
         metaItem.ad_creative_link_titles?.[0] ||
         null;
 
-      // Meta never returns downloadable creative image URLs — only tokenized HTML snapshots.
-      // Never store ad_snapshot_url as sourceLink (login wall + leaks access_token).
-      const creativeUrl = getCreativeForKeyword(matchedKeyword);
-      const libraryLink = metaItem.id
-        ? `https://www.facebook.com/ads/library/?id=${metaItem.id}`
-        : null;
-
-      const newAdData = {
-        metaAdId: metaItem.id || `meta_api_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+      await tryCreate({
+        metaAdId: String(metaItem.id),
         advertiserName: metaItem.page_name || generateAdvertiserName(matchedKeyword),
         advertiserLogo: pageLogo,
         advertiserLink: linkCaption,
-        adText: adText,
-        adCreativeUrl: creativeUrl,
+        adText: adText || generateAdText(matchedKeyword, group.region),
+        adCreativeUrl: getCreativeForKeyword(matchedKeyword),
         matchingKeyword: matchedKeyword,
         region: group.region,
         whatsappContact: whatsapp,
         startDate: metaItem.ad_creation_time ? new Date(metaItem.ad_creation_time) : new Date(),
         classification: 'NEW',
-        sourceLink: libraryLink
-      };
-
-      const existing = await prisma.advertisement.findUnique({
-        where: {
-          groupId_metaAdId: {
-            groupId: group.id,
-            metaAdId: newAdData.metaAdId
-          }
-        }
+        sourceLink: `https://www.facebook.com/ads/library/?id=${metaItem.id}`,
       });
-
-      if (!existing) {
-        const createdAd = await prisma.advertisement.create({
-          data: { ...newAdData, groupId: group.id }
-        });
-        createdAds.push(createdAd);
-      }
     }
   } else {
-    // Dynamic Keyword-Matched Simulation Mode
-    const advertiser = generateAdvertiserName(matchedKeyword);
-    const text = generateAdText(matchedKeyword, group.region);
-    const creative = getCreativeForKeyword(matchedKeyword);
-    const whatsapp = extractWhatsAppContact(text);
-
-    const newAdData = {
-      metaAdId: `new_ad_${Math.random().toString(36).substring(2, 10)}`,
-      advertiserName: advertiser,
-      adText: text,
-      adCreativeUrl: creative,
-      matchingKeyword: matchedKeyword,
-      region: group.region,
-      whatsappContact: whatsapp,
-      startDate: new Date(),
-      classification: 'NEW',
-      sourceLink: `https://www.facebook.com/ads/library/?id=${Math.floor(100000000 + Math.random() * 900000000)}`
-    };
-
-    const existing = await prisma.advertisement.findUnique({
-      where: {
-        groupId_metaAdId: {
-          groupId: group.id,
-          metaAdId: newAdData.metaAdId
-        }
-      }
-    });
-
-    if (!existing) {
-      const createdAd = await prisma.advertisement.create({
-        data: { ...newAdData, groupId: group.id }
+    // Simulation fallback — deterministic id per group/keyword/day so hourly cron cannot spam duplicates
+    const simId = `sim_${group.id.slice(0, 8)}_${matchedKeyword.toLowerCase().replace(/\s+/g, '_')}_${todayKey()}`;
+    if (!existingMetaIds.has(simId)) {
+      const advertiser = generateAdvertiserName(matchedKeyword);
+      const text = generateAdText(matchedKeyword, group.region);
+      await tryCreate({
+        metaAdId: simId,
+        advertiserName: advertiser,
+        adText: text,
+        adCreativeUrl: getCreativeForKeyword(matchedKeyword),
+        matchingKeyword: matchedKeyword,
+        region: group.region,
+        whatsappContact: extractWhatsAppContact(text),
+        startDate: new Date(),
+        classification: 'NEW',
+        sourceLink: `https://www.facebook.com/ads/library/?id=${Math.abs(
+          Array.from(simId).reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 0)
+        )}`,
       });
-      createdAds.push(createdAd);
     }
   }
 
-  // Trigger dual email alerts for new detected ads
-  if (createdAds.length > 0 && user?.emailAlerts !== false) {
-    for (const ad of createdAds) {
-      await sendEmailAlert({ ...group, user }, ad);
-    }
-  }
-
-  return createdAds.length > 0 ? createdAds[0] : null;
+  // Email is sent by the caller (cron / scan-all) as ONE bulk summary — not per ad here.
+  return createdAds;
 }

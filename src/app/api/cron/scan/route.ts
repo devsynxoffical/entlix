@@ -1,12 +1,11 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/db';
-import { detectNewAds } from '@/lib/monitoring';
+import { detectNewAds, purgeDuplicateAds } from '@/lib/monitoring';
+import { sendBulkScanAlert } from '@/lib/email';
 
 // GET or POST /api/cron/scan – automated hourly scan
-// Protect with Authorization: Bearer <CRON_SECRET> (or ?secret=)
 function isAuthorized(req: Request): boolean {
   const secret = process.env.CRON_SECRET;
-  // Allow unauthenticated only in local/dev when no secret is configured
   if (!secret) return process.env.NODE_ENV !== 'production';
 
   const auth = req.headers.get('authorization') || '';
@@ -15,7 +14,6 @@ function isAuthorized(req: Request): boolean {
   const url = new URL(req.url);
   if (url.searchParams.get('secret') === secret) return true;
 
-  // Vercel Cron sends this header when CRON_SECRET is set as env
   const vercelCron = req.headers.get('x-vercel-cron');
   if (vercelCron === '1' || vercelCron === 'true') return true;
 
@@ -36,6 +34,9 @@ async function handleCronScan(req: Request) {
   }
 
   try {
+    // Global duplicate cleanup first
+    const purged = await purgeDuplicateAds();
+
     const activeGroups = await prisma.monitoringGroup.findMany({
       where: { status: 'ACTIVE' },
     });
@@ -45,27 +46,41 @@ async function handleCronScan(req: Request) {
         timestamp: new Date().toISOString(),
         scannedGroups: 0,
         newAdsDetected: 0,
-        emailsSent: 0,
+        duplicatesRemoved: purged,
         message: 'No active monitoring groups found',
       });
     }
 
-    let newAdsCount = 0;
+    const allNewAds: any[] = [];
     for (const group of activeGroups) {
-      const newAd = await detectNewAds(group.id);
-      // detectNewAds emails each newly created ad when emailAlerts is enabled
-      if (newAd) newAdsCount++;
+      const created = await detectNewAds(group.id);
+      allNewAds.push(...created);
+    }
+
+    const user = await prisma.user.findFirst();
+    let emailResult: any = null;
+    if (allNewAds.length > 0) {
+      emailResult = await sendBulkScanAlert({
+        groupsScanned: activeGroups.length,
+        ads: allNewAds,
+        user,
+      });
     }
 
     console.log(
-      `⏰ [HOURLY CRON] Scanned ${activeGroups.length} group(s). ${newAdsCount} new ad batch(es) detected.`
+      `⏰ [HOURLY CRON] Scanned ${activeGroups.length} group(s). ${allNewAds.length} new unique ad(s). Purged ${purged} duplicate(s).`
     );
 
     return NextResponse.json({
       timestamp: new Date().toISOString(),
       scannedGroups: activeGroups.length,
-      newAdsDetected: newAdsCount,
-      message: `Hourly scan completed. ${newAdsCount} new ad batch(es) detected; alerts emailed when configured.`,
+      newAdsDetected: allNewAds.length,
+      duplicatesRemoved: purged,
+      emailSent: !!emailResult?.sent,
+      message:
+        allNewAds.length > 0
+          ? `Hourly scan found ${allNewAds.length} new unique ad(s); one summary email sent.`
+          : 'Hourly scan completed. No new unique ads.',
     });
   } catch (error) {
     console.error('Hourly cron scan error:', error);

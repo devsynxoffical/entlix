@@ -134,7 +134,11 @@ export default function GroupManager() {
     try {
       const res = await fetch(`/api/groups/${id}/scan`, { method: 'POST' });
       const data = await res.json();
-      showToast(data.detected ? `🎉 New ad detected and saved!` : 'Scan complete — no new ads found.');
+      showToast(
+        data.detected
+          ? `🎉 ${data.newAdsDetected || 1} new unique ad(s) saved — summary email sent`
+          : 'Scan complete — no new unique ads found.'
+      );
       if (data.detected) fetchGroups();
     } catch { showToast('Scan failed', 'error'); }
     finally { setScanningId(null); }
@@ -145,7 +149,11 @@ export default function GroupManager() {
     try {
       const res = await fetch('/api/groups/scan-all', { method: 'POST' });
       const data = await res.json();
-      showToast(`Scan complete for ${data.scanned} active groups. ${data.newAdsDetected} new ad(s) detected!`);
+      showToast(
+        `Scan complete for ${data.scanned} active groups. ${data.newAdsDetected} new unique ad(s)${
+          data.duplicatesRemoved ? ` · removed ${data.duplicatesRemoved} duplicate(s)` : ''
+        }.`
+      );
       fetchGroups();
     } catch {
       showToast('Batch scan failed', 'error');

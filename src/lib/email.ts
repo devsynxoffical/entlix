@@ -18,22 +18,27 @@ function parseEmailList(raw: string | undefined | null): string[] {
 
 /** Primary TO + CC list from env (ALERT_EMAILS / ALERT_CC_EMAILS / ADMIN_EMAIL). */
 export function getAlertRecipients(): { to: string[]; cc: string[] } {
+  // Free-tier Resend: TO must be your verified Resend account email
+  const toList = parseEmailList(process.env.ALERT_TO_EMAIL || process.env.ADMIN_EMAIL);
   const configured = parseEmailList(process.env.ALERT_EMAILS);
   const extraCc = parseEmailList(process.env.ALERT_CC_EMAILS);
-  const admin = parseEmailList(process.env.ADMIN_EMAIL);
 
-  // Default alert list: the 3 inboxes the team wants notified
-  const defaults = [
-    'ahmadadsmanager@gmail.com',
-    'rankmoraoffical@gmail.com',
-    'hassanaliin9class@gmail.com',
-  ];
+  const defaultTo = 'hassanaliin9class@gmail.com';
+  const defaultCc = ['ahmadadsmanager@gmail.com', 'rankmoraoffical@gmail.com'];
 
-  const all = Array.from(new Set([...(configured.length ? configured : defaults), ...extraCc, ...admin]));
-  if (all.length === 0) return { to: [], cc: [] };
+  const to = toList[0] || configured[0] || defaultTo;
 
-  const [primary, ...rest] = all;
-  return { to: [primary], cc: rest };
+  // Everyone else goes in CC (never duplicate the TO address)
+  const cc = Array.from(
+    new Set([
+      ...configured.filter((e) => e !== to),
+      ...extraCc,
+      ...(configured.length ? [] : defaultCc),
+      ...toList.slice(1),
+    ])
+  ).filter((e) => e !== to);
+
+  return { to: [to], cc };
 }
 
 async function deliverEmail(payload: AlertPayload): Promise<{ sent: boolean; provider: string; error?: string; sentTo?: string[] }> {
@@ -70,16 +75,17 @@ async function deliverEmail(payload: AlertPayload): Promise<{ sent: boolean; pro
       return { sent: true, provider: 'resend', sentTo: allRecipients };
     }
 
-    console.warn('Resend TO+CC send failed, falling back to per-recipient:', data?.message || res.status);
+    console.warn('Resend TO+CC send failed, falling back (TO-only then per-recipient):', data?.message || res.status);
   } catch (error: any) {
-    console.warn('Resend TO+CC error, falling back to per-recipient:', error?.message);
+    console.warn('Resend TO+CC error, falling back:', error?.message);
   }
 
-  // Fallback: send individually so verified inboxes still receive mail on free tier
+  // Free tier: send TO first (verified inbox) so delivery always works
   const sentTo: string[] = [];
   const errors: string[] = [];
+  const ordered = [...payload.to, ...payload.cc.filter((e) => !payload.to.includes(e))];
 
-  for (const to of allRecipients) {
+  for (const to of ordered) {
     try {
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',

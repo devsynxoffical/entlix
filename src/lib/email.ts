@@ -7,36 +7,58 @@ type AlertPayload = {
   html: string;
 };
 
-async function deliverEmail(payload: AlertPayload): Promise<{ sent: boolean; provider: string; error?: string }> {
+async function deliverEmail(payload: AlertPayload): Promise<{ sent: boolean; provider: string; error?: string; sentTo?: string[] }> {
   const from = process.env.EMAIL_FROM || 'Entiix Alerts <onboarding@resend.dev>';
   const resendKey = process.env.RESEND_API_KEY;
 
   if (resendKey) {
-    try {
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${resendKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from,
-          to: payload.recipients,
-          subject: payload.subject,
-          html: payload.html,
-        }),
-      });
+    const sentTo: string[] = [];
+    const errors: string[] = [];
 
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        console.error('Resend email failed:', data);
-        return { sent: false, provider: 'resend', error: data?.message || `HTTP ${res.status}` };
+    // Send one-by-one so a blocked recipient (e.g. unverified domain) does not block others
+    for (const to of payload.recipients) {
+      try {
+        const res = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${resendKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from,
+            to: [to],
+            subject: payload.subject,
+            html: payload.html,
+          }),
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          console.error(`Resend failed for ${to}:`, data);
+          errors.push(`${to}: ${data?.message || `HTTP ${res.status}`}`);
+        } else {
+          sentTo.push(to);
+        }
+      } catch (error: any) {
+        console.error(`Resend error for ${to}:`, error);
+        errors.push(`${to}: ${error?.message || 'network error'}`);
       }
-      return { sent: true, provider: 'resend' };
-    } catch (error: any) {
-      console.error('Resend email error:', error);
-      return { sent: false, provider: 'resend', error: error?.message || 'network error' };
     }
+
+    if (sentTo.length > 0) {
+      return {
+        sent: true,
+        provider: 'resend',
+        sentTo,
+        error: errors.length ? errors.join(' | ') : undefined,
+      };
+    }
+
+    return {
+      sent: false,
+      provider: 'resend',
+      error: errors.join(' | ') || 'All recipients failed',
+    };
   }
 
   console.warn(
@@ -136,7 +158,10 @@ export async function sendEmailAlert(group: any, ad: any) {
 
   const result = await deliverEmail(alertPayload);
   if (result.sent) {
-    console.log(`✅ Alert email delivered via ${result.provider} → ${recipients.join(', ')}`);
+    console.log(
+      `✅ Alert email delivered via ${result.provider} → ${(result.sentTo || []).join(', ')}` +
+        (result.error ? ` (partial: ${result.error})` : '')
+    );
   } else {
     console.warn(`❌ Alert email NOT delivered (${result.provider}): ${result.error}`);
   }

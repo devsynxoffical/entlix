@@ -1,8 +1,13 @@
 import { MonitoringGroup, Advertisement } from '@prisma/client';
+import { triggerWebhookAlerts } from './webhook';
 
 export async function sendEmailAlert(group: any, ad: any) {
-  const userEmail = group.user?.email || 'subscriber@entiix.com';
+  const user = group.user;
+  const userEmail = user?.email || 'subscriber@entiix.com';
   const adminEmail = process.env.ADMIN_EMAIL || 'admin@entiix.com';
+
+  // Fire Slack and Discord Webhook Alerts concurrently
+  triggerWebhookAlerts(group, ad, user).catch(console.error);
   
   // Recipients list: notify both user and admin
   const recipients = Array.from(new Set([userEmail, adminEmail].filter(Boolean)));

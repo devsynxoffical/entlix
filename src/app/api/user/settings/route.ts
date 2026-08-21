@@ -19,14 +19,18 @@ export async function GET() {
       return NextResponse.json({
         defaultRegion: 'Global',
         emailAlerts: true,
-        metaAccessToken: ''
+        metaAccessToken: '',
+        slackWebhookUrl: '',
+        discordWebhookUrl: ''
       });
     }
 
     return NextResponse.json({
       defaultRegion: user.defaultRegion || 'Global',
       emailAlerts: user.emailAlerts !== false,
-      metaAccessToken: user.metaAccessToken || ''
+      metaAccessToken: user.metaAccessToken || '',
+      slackWebhookUrl: user.slackWebhookUrl || '',
+      discordWebhookUrl: user.discordWebhookUrl || ''
     });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch user settings' }, { status: 500 });
@@ -37,7 +41,7 @@ export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
     const body = await req.json();
-    const { defaultRegion, emailAlerts, metaAccessToken } = body;
+    const { defaultRegion, emailAlerts, metaAccessToken, slackWebhookUrl, discordWebhookUrl } = body;
 
     const userEmail = session?.user?.email;
     let user = null;
@@ -57,7 +61,9 @@ export async function POST(req: Request) {
       data: {
         defaultRegion: defaultRegion ?? user.defaultRegion,
         emailAlerts: emailAlerts ?? user.emailAlerts,
-        metaAccessToken: metaAccessToken !== undefined ? metaAccessToken : user.metaAccessToken
+        metaAccessToken: metaAccessToken !== undefined ? metaAccessToken : user.metaAccessToken,
+        slackWebhookUrl: slackWebhookUrl !== undefined ? slackWebhookUrl : user.slackWebhookUrl,
+        discordWebhookUrl: discordWebhookUrl !== undefined ? discordWebhookUrl : user.discordWebhookUrl
       }
     });
 
@@ -65,7 +71,9 @@ export async function POST(req: Request) {
       success: true,
       defaultRegion: updatedUser.defaultRegion,
       emailAlerts: updatedUser.emailAlerts,
-      metaAccessToken: updatedUser.metaAccessToken
+      metaAccessToken: updatedUser.metaAccessToken,
+      slackWebhookUrl: updatedUser.slackWebhookUrl,
+      discordWebhookUrl: updatedUser.discordWebhookUrl
     });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to save settings' }, { status: 500 });

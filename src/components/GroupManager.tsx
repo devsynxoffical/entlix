@@ -227,7 +227,29 @@ export default function GroupManager() {
               />
             </div>
             <div className="form-group sm:col-span-2">
-              <label className="form-label">Keywords <span className="text-slate-400 font-normal">(semicolon-separated)</span></label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="form-label mb-0">Keywords <span className="text-slate-400 font-normal">(semicolon-separated)</span></label>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!name) {
+                      alert('Please enter a Group Name or Niche first to suggest keywords.');
+                      return;
+                    }
+                    try {
+                      const res = await fetch(`/api/ai/keywords?niche=${encodeURIComponent(name)}`);
+                      const data = await res.json();
+                      if (data.formattedString) {
+                        setKeywords(data.formattedString);
+                      }
+                    } catch {}
+                  }}
+                  className="text-xs font-bold text-purple-600 hover:text-purple-700 bg-purple-50 hover:bg-purple-100 px-2.5 py-1 rounded-lg flex items-center gap-1 transition-colors"
+                >
+                  <Zap size={12} className="text-purple-600" />
+                  <span>✨ Auto-Suggest AI Keywords</span>
+                </button>
+              </div>
               <input
                 type="text" required value={keywords} onChange={e => setKeywords(e.target.value)}
                 className="input-field" placeholder="e.g. lead generation; marketing automation; CRM"

@@ -30,6 +30,7 @@ model Advertisement {
   advertiserLink   String?
   adText           String?
   adCreativeUrl    String?
+  creativeType     String          @default("IMAGE") // IMAGE, VIDEO, CAROUSEL
   matchingKeyword  String
   region           String
   whatsappContact  String?         // Extracted WhatsApp number or wa.me link
@@ -81,6 +82,8 @@ model User {
   defaultRegion   String?           @default("Global")
   emailAlerts     Boolean           @default(true)
   metaAccessToken String?
+  slackWebhookUrl  String?
+  discordWebhookUrl String?
   accounts        Account[]
   sessions        Session[]
   monitoringGroups MonitoringGroup[]

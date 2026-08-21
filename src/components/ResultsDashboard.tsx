@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import AdCard from './AdCard';
-import { Search, Filter, Loader2, RefreshCw, AlertCircle, Download, Star } from 'lucide-react';
+import { Search, Filter, Loader2, RefreshCw, AlertCircle, Download } from 'lucide-react';
 
 export default function ResultsDashboard() {
   const [groups, setGroups] = useState<any[]>([]);
@@ -12,6 +12,7 @@ export default function ResultsDashboard() {
   const [adsLoading, setAdsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('ALL'); // ALL, NEW, EXISTING, FAVORITE
+  const [copyLengthFilter, setCopyLengthFilter] = useState('ALL'); // ALL, SHORT, LONG
 
   useEffect(() => {
     fetch('/api/groups')
@@ -61,7 +62,12 @@ export default function ResultsDashboard() {
     else if (filterType === 'EXISTING') matchesFilter = ad.classification === 'EXISTING';
     else if (filterType === 'FAVORITE') matchesFilter = !!ad.isFavorite;
 
-    return matchesSearch && matchesFilter;
+    let matchesCopyLength = true;
+    const wordCount = (ad.adText || '').split(/\s+/).length;
+    if (copyLengthFilter === 'SHORT') matchesCopyLength = wordCount <= 30;
+    else if (copyLengthFilter === 'LONG') matchesCopyLength = wordCount > 30;
+
+    return matchesSearch && matchesFilter && matchesCopyLength;
   });
 
   // Export filtered ad leads to CSV
@@ -132,9 +138,9 @@ export default function ResultsDashboard() {
             <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text" 
-              placeholder="Search ads, WhatsApp contacts..."
+              placeholder="Search ads, WhatsApp..."
               className="input-field text-sm py-2 pl-9"
-              style={{ minWidth: '220px' }}
+              style={{ minWidth: '200px' }}
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
             />
@@ -152,6 +158,15 @@ export default function ResultsDashboard() {
               <option value="FAVORITE">⭐ Bookmarked Favorites</option>
             </select>
           </div>
+          <select
+            className="input-field text-sm py-2 font-medium"
+            value={copyLengthFilter}
+            onChange={e => setCopyLengthFilter(e.target.value)}
+          >
+            <option value="ALL">All Copy Lengths</option>
+            <option value="SHORT">Short-form Copy (&le;30 words)</option>
+            <option value="LONG">Long-form Copy (&gt;30 words)</option>
+          </select>
           <button 
             onClick={exportToCSV}
             disabled={filteredAds.length === 0}
@@ -181,7 +196,7 @@ export default function ResultsDashboard() {
           )}
         </div>
         <span className="text-xs text-slate-400 font-medium hidden sm:block">
-          Click any card for full details & WhatsApp contact
+          Click any advertiser name to open full Brand Dossier
         </span>
       </div>
 

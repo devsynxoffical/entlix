@@ -198,12 +198,15 @@ export async function detectNewAds(groupId: string) {
         pageLogo = await fetchMetaPageLogo(metaItem.page_id, accessToken);
       }
 
+      const linkCaption = metaItem.ad_creative_link_captions?.[0] || null;
+
       const newAdData = {
         metaAdId: metaItem.id || `meta_api_${Date.now()}_${Math.random().toString(36).substring(7)}`,
         advertiserName: metaItem.page_name || generateAdvertiserName(matchedKeyword),
         advertiserLogo: pageLogo,
+        advertiserLink: linkCaption,
         adText: adText,
-        adCreativeUrl: getCreativeForKeyword(matchedKeyword),
+        adCreativeUrl: metaItem.ad_snapshot_url || getCreativeForKeyword(matchedKeyword),
         matchingKeyword: matchedKeyword,
         region: group.region,
         whatsappContact: whatsapp,

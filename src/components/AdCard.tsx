@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ExternalLink, Clock, Tag, MapPin, Copy, Check, Eye, X, MessageSquare, Star, Sparkles, Building2, ChevronRight, Loader2 } from 'lucide-react';
+import { ExternalLink, Clock, Tag, MapPin, Copy, Check, Eye, X, MessageSquare, Star, Sparkles, Building2, Globe, Loader2 } from 'lucide-react';
 
 export default function AdCard({ ad, onFavoriteToggle }: { ad: any; onFavoriteToggle?: (id: string, isFav: boolean) => void }) {
   const isNew = ad.classification === 'NEW';
@@ -73,6 +73,7 @@ export default function AdCard({ ad, onFavoriteToggle }: { ad: any; onFavoriteTo
 
   const whatsappCleanNumber = ad.whatsappContact ? ad.whatsappContact.replace(/[^0-9]/g, '') : null;
   const whatsappUrl = whatsappCleanNumber ? `https://wa.me/${whatsappCleanNumber}` : null;
+  const isMetaSnapshot = ad.sourceLink && ad.sourceLink.includes('facebook.com/ads/archive');
 
   return (
     <>
@@ -118,7 +119,7 @@ export default function AdCard({ ad, onFavoriteToggle }: { ad: any; onFavoriteTo
                   rel="noopener noreferrer" 
                   onClick={(e) => e.stopPropagation()}
                   className="text-slate-400 hover:text-purple-600 transition-colors p-1.5"
-                  title="View Ad in Meta Library"
+                  title="View Original Meta Render"
                 >
                   <ExternalLink size={15} />
                 </a>
@@ -128,7 +129,20 @@ export default function AdCard({ ad, onFavoriteToggle }: { ad: any; onFavoriteTo
           
           {/* Content area */}
           <div className="p-5">
-            {ad.adCreativeUrl ? (
+            {isMetaSnapshot ? (
+              <div className="w-full h-52 bg-slate-100 rounded-xl mb-4 overflow-hidden border border-slate-200/80 relative shadow-inner">
+                <iframe 
+                  src={ad.sourceLink} 
+                  className="w-full h-full border-0 pointer-events-none scale-105"
+                  title="Original Meta Ad Creative Render"
+                />
+                <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/20 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+                  <span className="bg-white/90 text-slate-800 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-md">
+                    <Eye size={14} /> View Original Interactive Ad
+                  </span>
+                </div>
+              </div>
+            ) : ad.adCreativeUrl ? (
               <div className="w-full h-44 bg-slate-100 rounded-xl mb-4 flex items-center justify-center overflow-hidden border border-slate-200/50 relative">
                 <img src={ad.adCreativeUrl} alt="Ad Creative" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                 <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/20 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
@@ -143,9 +157,17 @@ export default function AdCard({ ad, onFavoriteToggle }: { ad: any; onFavoriteTo
               </div>
             )}
             
-            <p className="text-xs leading-relaxed text-slate-600 line-clamp-3 mb-4 font-normal">
+            <p className="text-xs leading-relaxed text-slate-600 line-clamp-3 mb-3 font-normal">
               {ad.adText || "No ad description available for this placement."}
             </p>
+
+            {/* CTA Link Caption Badge */}
+            {ad.advertiserLink && (
+              <div className="mb-3 flex items-center gap-1 text-[11px] font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg w-fit">
+                <Globe size={12} className="text-purple-600 shrink-0" />
+                <span className="truncate max-w-[200px]">{ad.advertiserLink}</span>
+              </div>
+            )}
 
             {/* WhatsApp Quick Lead Button */}
             {whatsappUrl && (
@@ -154,7 +176,7 @@ export default function AdCard({ ad, onFavoriteToggle }: { ad: any; onFavoriteTo
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
-                className="w-full mb-3 btn bg-emerald-600 hover:bg-emerald-700 text-white text-xs py-2 px-3 rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-sm shadow-emerald-500/20"
+                className="w-full mb-2 btn bg-emerald-600 hover:bg-emerald-700 text-white text-xs py-2 px-3 rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-sm shadow-emerald-500/20"
               >
                 <MessageSquare size={14} />
                 <span>Chat on WhatsApp ({ad.whatsappContact})</span>
@@ -225,7 +247,7 @@ export default function AdCard({ ad, onFavoriteToggle }: { ad: any; onFavoriteTo
                   onClick={() => setActiveTab('DETAILS')}
                   className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${activeTab === 'DETAILS' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200/60'}`}
                 >
-                  Ad Details & Copy
+                  Original Meta Ad Render & Copy
                 </button>
                 <button
                   onClick={() => {
@@ -244,11 +266,19 @@ export default function AdCard({ ad, onFavoriteToggle }: { ad: any; onFavoriteTo
             <div className="p-6 overflow-y-auto flex flex-col gap-6">
               {activeTab === 'DETAILS' ? (
                 <>
-                  {ad.adCreativeUrl && (
+                  {isMetaSnapshot ? (
+                    <div className="w-full h-96 bg-slate-100 rounded-xl overflow-hidden border border-slate-200 shadow-inner relative">
+                      <iframe 
+                        src={ad.sourceLink} 
+                        className="w-full h-full border-0"
+                        title="Original Meta Ad Creative Preview"
+                      />
+                    </div>
+                  ) : ad.adCreativeUrl ? (
                     <div className="w-full max-h-80 bg-slate-100 rounded-xl overflow-hidden flex items-center justify-center border border-slate-200">
                       <img src={ad.adCreativeUrl} alt="Ad Creative Preview" className="max-w-full max-h-80 object-contain" />
                     </div>
-                  )}
+                  ) : null}
 
                   <div>
                     <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Ad Copy & Headline Description</h4>
@@ -364,7 +394,7 @@ export default function AdCard({ ad, onFavoriteToggle }: { ad: any; onFavoriteTo
                     rel="noopener noreferrer"
                     className="btn btn-primary text-xs py-2 px-4 gap-1.5 shadow-md shadow-purple-500/20 font-bold"
                   >
-                    <span>Open Meta Ad Library</span>
+                    <span>Open Original Meta Ad</span>
                     <ExternalLink size={14} />
                   </a>
                 )}

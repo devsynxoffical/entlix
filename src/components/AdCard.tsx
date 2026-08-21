@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { ExternalLink, Tag, MapPin, Star, MessageSquare, Eye, Globe, ImageOff } from 'lucide-react';
-import { resolveAdCreativeUrl } from '@/lib/adCreative';
+import { resolveAdCreativeUrl, resolveSourceLink } from '@/lib/adCreative';
 
 export default function AdCard({
   ad,
@@ -18,6 +18,7 @@ export default function AdCard({
   const isNew = ad.classification === 'NEW';
   const whatsappCleanNumber = ad.whatsappContact ? ad.whatsappContact.replace(/[^0-9]/g, '') : null;
   const whatsappUrl = whatsappCleanNumber ? `https://wa.me/${whatsappCleanNumber}` : null;
+  const liveAdUrl = resolveSourceLink(ad.sourceLink, ad.metaAdId);
   const [imgSrc, setImgSrc] = useState(() =>
     resolveAdCreativeUrl(ad.adCreativeUrl, ad.matchingKeyword)
   );
@@ -82,14 +83,14 @@ export default function AdCard({
             >
               <Star size={15} className={ad.isFavorite ? 'fill-amber-400' : ''} />
             </button>
-            {ad.sourceLink && (
+            {liveAdUrl && (
               <a
-                href={ad.sourceLink}
+                href={liveAdUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
                 className="text-slate-400 hover:text-purple-600 transition-colors p-1.5"
-                title="Open Live Meta Ad"
+                title="Open in Meta Ad Library"
               >
                 <ExternalLink size={15} />
               </a>

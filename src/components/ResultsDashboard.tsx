@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import AdCard from './AdCard';
-import { resolveAdCreativeUrl } from '@/lib/adCreative';
+import { resolveAdCreativeUrl, resolveSourceLink } from '@/lib/adCreative';
 import { 
   Search, Filter, Loader2, RefreshCw, AlertCircle, Download, 
   X, ExternalLink, Copy, Check, MessageSquare, Tag, MapPin, 
@@ -140,10 +140,15 @@ export default function ResultsDashboard() {
   };
 
   const copyAdLink = (url: string) => {
+    if (!url) return;
     navigator.clipboard.writeText(url);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
   };
+
+  const selectedLiveUrl = selectedAd
+    ? resolveSourceLink(selectedAd.sourceLink, selectedAd.metaAdId)
+    : null;
 
   const filteredAds = ads.filter(ad => {
     const q = searchQuery.toLowerCase();
@@ -180,7 +185,7 @@ export default function ResultsDashboard() {
       `"${ad.whatsappContact || ''}"`,
       `"${(ad.adText || '').replace(/"/g, '""')}"`,
       `"${new Date(ad.firstDetectedAt).toLocaleString()}"`,
-      `"${ad.sourceLink || ''}"`
+      `"${resolveSourceLink(ad.sourceLink, ad.metaAdId) || ''}"`
     ]);
 
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
@@ -442,9 +447,9 @@ export default function ResultsDashboard() {
                         {selectedAd.matchingKeyword ? `${selectedAd.matchingKeyword.toUpperCase()} Offer` : 'Special Promo'}
                       </span>
                     </div>
-                    {selectedAd.sourceLink && (
+                    {selectedLiveUrl && (
                       <a
-                        href={selectedAd.sourceLink}
+                        href={selectedLiveUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="btn btn-primary text-xs py-1.5 px-3.5 font-bold shrink-0"
@@ -533,8 +538,8 @@ export default function ResultsDashboard() {
 
             <div className="px-5 py-3.5 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between gap-2 shrink-0 flex-wrap">
               <button
-                onClick={() => copyAdLink(selectedAd.sourceLink || '')}
-                disabled={!selectedAd.sourceLink}
+                onClick={() => copyAdLink(selectedLiveUrl || '')}
+                disabled={!selectedLiveUrl}
                 className="btn btn-secondary text-xs py-2 px-3 gap-1.5 font-bold"
               >
                 {copiedLink ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
@@ -553,9 +558,9 @@ export default function ResultsDashboard() {
                     <span>WhatsApp</span>
                   </a>
                 )}
-                {selectedAd.sourceLink && (
+                {selectedLiveUrl && (
                   <a
-                    href={selectedAd.sourceLink}
+                    href={selectedLiveUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="btn btn-primary text-xs py-2 px-4 gap-1.5 font-bold"

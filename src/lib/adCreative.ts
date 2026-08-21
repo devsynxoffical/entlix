@@ -71,3 +71,63 @@ export function resolveAdCreativeUrl(
   if (isDisplayableImageUrl(adCreativeUrl) && adCreativeUrl) return adCreativeUrl;
   return getCreativeForKeyword(matchingKeyword || 'default');
 }
+
+/** Public Ad Library permalink — works in a browser without Graph API tokens. */
+export function publicMetaLibraryUrl(metaAdId: string | null | undefined): string | null {
+  if (!metaAdId) return null;
+  // Ignore mock/simulated ids that aren't real Meta archive ids
+  if (!/^\d+$/.test(String(metaAdId).trim())) return null;
+  return `https://www.facebook.com/ads/library/?id=${encodeURIComponent(String(metaAdId).trim())}`;
+}
+
+/**
+ * Snapshot URLs (`/ads/archive/render_ad/?…&access_token=…`) require login and
+ * leak API tokens. Always prefer the public library permalink instead.
+ */
+export function isPrivateMetaSnapshotUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  const u = url.toLowerCase();
+  return (
+    u.includes('access_token=') ||
+    u.includes('/ads/archive/render_ad') ||
+    u.includes('ad_snapshot') ||
+    (u.includes('facebook.com') && u.includes('render_ad'))
+  );
+}
+
+/** Extract a numeric Meta ad id from a library/snapshot URL when possible. */
+export function extractMetaAdIdFromUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    const fromQuery = parsed.searchParams.get('id');
+    if (fromQuery && /^\d+$/.test(fromQuery)) return fromQuery;
+  } catch {
+    // fall through
+  }
+  const match = url.match(/[?&]id=(\d+)/);
+  return match?.[1] || null;
+}
+
+/** Safe browser link for "Open Live Ad" / "Meta Library" / Copy Link. */
+export function resolveSourceLink(
+  sourceLink: string | null | undefined,
+  metaAdId?: string | null
+): string | null {
+  const fromId = publicMetaLibraryUrl(metaAdId);
+  if (fromId) return fromId;
+
+  if (!sourceLink) return null;
+  if (isPrivateMetaSnapshotUrl(sourceLink)) {
+    const extracted = extractMetaAdIdFromUrl(sourceLink);
+    return publicMetaLibraryUrl(extracted);
+  }
+
+  // Already a public library URL
+  if (sourceLink.includes('facebook.com/ads/library')) {
+    const extracted = extractMetaAdIdFromUrl(sourceLink);
+    return publicMetaLibraryUrl(extracted) || sourceLink.split('&access_token=')[0];
+  }
+
+  return sourceLink;
+}

@@ -202,12 +202,12 @@ export async function detectNewAds(groupId: string) {
         metaItem.ad_creative_link_titles?.[0] ||
         null;
 
-      // Meta never returns downloadable creative image URLs — only HTML snapshot pages.
-      // Store a displayable placeholder; keep the snapshot as sourceLink for "Open Live Ad".
+      // Meta never returns downloadable creative image URLs — only tokenized HTML snapshots.
+      // Never store ad_snapshot_url as sourceLink (login wall + leaks access_token).
       const creativeUrl = getCreativeForKeyword(matchedKeyword);
-      const libraryLink =
-        metaItem.ad_snapshot_url ||
-        (metaItem.id ? `https://www.facebook.com/ads/library/?id=${metaItem.id}` : null);
+      const libraryLink = metaItem.id
+        ? `https://www.facebook.com/ads/library/?id=${metaItem.id}`
+        : null;
 
       const newAdData = {
         metaAdId: metaItem.id || `meta_api_${Date.now()}_${Math.random().toString(36).substring(7)}`,

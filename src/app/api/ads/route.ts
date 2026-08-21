@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/db';
-import { isNonImageCreativeUrl, resolveAdCreativeUrl } from '@/lib/adCreative';
+import {
+  isNonImageCreativeUrl,
+  isPrivateMetaSnapshotUrl,
+  resolveAdCreativeUrl,
+  resolveSourceLink,
+} from '@/lib/adCreative';
 
 export async function GET(req: Request) {
   try {
@@ -16,34 +21,50 @@ export async function GET(req: Request) {
       orderBy: { firstDetectedAt: 'desc' }
     });
 
-    // Repair rows that accidentally stored Meta HTML snapshot URLs as creatives
+    // Repair bad creatives + private snapshot links that leak tokens / force login
     const repaired = await Promise.all(
       ads.map(async (ad) => {
-        if (!isNonImageCreativeUrl(ad.adCreativeUrl)) {
-          return ad;
+        const needsCreativeFix = isNonImageCreativeUrl(ad.adCreativeUrl);
+        const safeSource = resolveSourceLink(ad.sourceLink, ad.metaAdId);
+        const needsSourceFix =
+          !!safeSource &&
+          (isPrivateMetaSnapshotUrl(ad.sourceLink) || ad.sourceLink !== safeSource);
+
+        if (!needsCreativeFix && !needsSourceFix) {
+          return { ...ad, sourceLink: safeSource || ad.sourceLink };
         }
 
-        const fixedUrl = resolveAdCreativeUrl(null, ad.matchingKeyword);
-        const sourceLink =
-          ad.sourceLink ||
-          (ad.adCreativeUrl?.includes('facebook.com') ? ad.adCreativeUrl : null) ||
-          (ad.metaAdId ? `https://www.facebook.com/ads/library/?id=${ad.metaAdId}` : null);
+        const data: { adCreativeUrl?: string; sourceLink?: string } = {};
+        if (needsCreativeFix) {
+          data.adCreativeUrl = resolveAdCreativeUrl(null, ad.matchingKeyword);
+        }
+        if (needsSourceFix && safeSource) {
+          data.sourceLink = safeSource;
+        }
 
         try {
           return await prisma.advertisement.update({
             where: { id: ad.id },
-            data: {
-              adCreativeUrl: fixedUrl,
-              ...(sourceLink && !ad.sourceLink ? { sourceLink } : {}),
-            },
+            data,
           });
         } catch {
-          return { ...ad, adCreativeUrl: fixedUrl, sourceLink: sourceLink || ad.sourceLink };
+          return {
+            ...ad,
+            ...(data.adCreativeUrl ? { adCreativeUrl: data.adCreativeUrl } : {}),
+            sourceLink: safeSource || ad.sourceLink,
+          };
         }
       })
     );
 
-    return NextResponse.json(repaired);
+    // Always return sanitized links even if DB update skipped
+    const safeAds = repaired.map((ad) => ({
+      ...ad,
+      adCreativeUrl: resolveAdCreativeUrl(ad.adCreativeUrl, ad.matchingKeyword),
+      sourceLink: resolveSourceLink(ad.sourceLink, ad.metaAdId),
+    }));
+
+    return NextResponse.json(safeAds);
   } catch (error) {
     console.error('Failed to fetch ads:', error);
     return NextResponse.json({ error: 'Failed to fetch ads' }, { status: 500 });

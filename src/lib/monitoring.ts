@@ -1,5 +1,6 @@
 import prisma from './db';
 import { getCreativeForKeyword } from './adCreative';
+import { resolveMetaCountry } from './regions';
 
 /** Stable fingerprint to catch near-duplicate creatives (same page + same copy). */
 export function adContentFingerprint(advertiserName?: string | null, adText?: string | null): string {
@@ -56,23 +57,6 @@ export async function purgeDuplicateAds(groupId?: string): Promise<number> {
   await prisma.advertisement.deleteMany({ where: { id: { in: toDelete } } });
   console.log(`🧹 Purged ${toDelete.length} duplicate ad(s)${groupId ? ` in group ${groupId}` : ''}`);
   return toDelete.length;
-}
-
-function resolveMetaCountry(region: string): string {
-  const r = (region || '').trim().toUpperCase();
-  const map: Record<string, string> = {
-    'UNITED KINGDOM': 'GB', UK: 'GB', GB: 'GB',
-    'UNITED STATES': 'US', USA: 'US', US: 'US',
-    CANADA: 'CA', CA: 'CA',
-    AUSTRALIA: 'AU', AU: 'AU',
-    INDIA: 'IN', IN: 'IN',
-    GERMANY: 'DE', DE: 'DE',
-    FRANCE: 'FR', FR: 'FR',
-    GLOBAL: 'US', ALL: 'US', WORLDWIDE: 'US',
-  };
-  if (map[r]) return map[r];
-  if (/^[A-Z]{2}$/.test(r)) return r;
-  return 'US';
 }
 
 function generateAdvertiserName(keyword: string): string {

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Save, Key, Bell, Globe, CheckCircle2, MessageSquare, Hash, Mail } from 'lucide-react';
+import { REGION_OPTIONS } from '@/lib/regions';
 
 export default function SettingsPage() {
   const [accountEmail, setAccountEmail] = useState('');
@@ -188,12 +189,9 @@ export default function SettingsPage() {
               onChange={e => setDefaultRegion(e.target.value)}
               className="input-field text-sm font-semibold max-w-xs"
             >
-              <option value="United Kingdom">United Kingdom (UK)</option>
-              <option value="United States">United States (US)</option>
-              <option value="Global">Global / Worldwide</option>
-              <option value="Canada">Canada</option>
-              <option value="Australia">Australia</option>
-              <option value="Europe">Europe (EU)</option>
+              {REGION_OPTIONS.map((r) => (
+                <option key={r.value} value={r.value}>{r.label}</option>
+              ))}
             </select>
           </div>
         </div>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, Pause, Play, RefreshCw, Edit3, Globe, Tag, CheckCircle2, AlertCircle, Loader2, Zap, X } from 'lucide-react';
+import { REGION_OPTIONS } from '@/lib/regions';
 
 type Group = {
   id: string;
@@ -266,12 +267,9 @@ export default function GroupManager() {
             <div className="form-group">
               <label className="form-label">Target Region</label>
               <select value={region} onChange={e => setRegion(e.target.value)} className="input-field">
-                <option value="United Kingdom">United Kingdom (UK)</option>
-                <option value="United States">United States (US)</option>
-                <option value="Global">Global</option>
-                <option value="Canada">Canada (CA)</option>
-                <option value="Australia">Australia (AU)</option>
-                <option value="Europe">Europe (EU)</option>
+                {REGION_OPTIONS.map((r) => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
               </select>
             </div>
             <div className="sm:col-span-2 flex justify-end gap-3 mt-2">

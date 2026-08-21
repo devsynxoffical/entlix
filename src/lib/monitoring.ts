@@ -97,7 +97,11 @@ function extractWhatsAppContact(text: string, captions: string[] = []): string |
   return null;
 }
 
-export async function fetchMetaAdLibraryAPI(searchTerms: string, region: string, accessToken: string) {
+export async function fetchMetaAdLibraryAPI(
+  searchTerms: string,
+  region: string,
+  accessToken: string
+): Promise<{ data: any[] | null; errorCode?: number; errorMessage?: string }> {
   try {
     const fields = [
       'id',
@@ -114,7 +118,7 @@ export async function fetchMetaAdLibraryAPI(searchTerms: string, region: string,
     const countryParam = resolveMetaCountry(region);
     const url =
       `https://graph.facebook.com/v19.0/ads_archive` +
-      `?access_token=${accessToken}` +
+      `?access_token=${encodeURIComponent(accessToken)}` +
       `&search_terms=${encodeURIComponent(searchTerms)}` +
       `&ad_type=ALL` +
       `&ad_reached_countries=['${countryParam}']` +
@@ -126,16 +130,56 @@ export async function fetchMetaAdLibraryAPI(searchTerms: string, region: string,
     const data = await response.json();
 
     if (!response.ok || data.error) {
-      if (data.error?.message) {
-        console.warn(`Meta API Notice: ${data.error.message} (Code: ${data.error.code}). Using fallback keyword extractor.`);
-      }
-      return null;
+      const errorCode = data.error?.code;
+      const errorMessage = data.error?.message || `HTTP ${response.status}`;
+      console.warn(`Meta API Notice: ${errorMessage} (Code: ${errorCode}).`);
+      return { data: null, errorCode, errorMessage };
     }
-    return data?.data || null;
-  } catch (error) {
+    return { data: data?.data || [] };
+  } catch (error: any) {
     console.error('Meta API fetch error:', error);
+    return { data: null, errorMessage: error?.message || 'network error' };
+  }
+}
+
+/** Prefer Railway/env token, then Settings token. Retry the other if first is expired (190). */
+async function fetchMetaAdsWithBestToken(
+  searchTerms: string,
+  region: string,
+  userToken?: string | null
+): Promise<any[] | null> {
+  const envToken = (process.env.META_ACCESS_TOKEN || '').trim() || null;
+  const dbToken = (userToken || '').trim() || null;
+
+  // Env wins first so Railway production token is not overridden by an old Settings value
+  const candidates = Array.from(new Set([envToken, dbToken].filter(Boolean))) as string[];
+
+  if (candidates.length === 0) {
+    console.warn('⚠️ No META_ACCESS_TOKEN (env) or Settings metaAccessToken configured.');
     return null;
   }
+
+  for (let i = 0; i < candidates.length; i++) {
+    const token = candidates[i];
+    const source = token === envToken ? 'META_ACCESS_TOKEN (Railway/env)' : 'Settings (database)';
+    console.log(`🔑 Trying Meta token from ${source}…`);
+    const result = await fetchMetaAdLibraryAPI(searchTerms, region, token);
+
+    if (result.data) {
+      console.log(`✅ Meta API OK via ${source} — ${result.data.length} ad(s)`);
+      return result.data;
+    }
+
+    // Expired/invalid — try next token if available
+    if (result.errorCode === 190 && i < candidates.length - 1) {
+      console.warn(`⚠️ Token from ${source} expired/invalid (190). Trying fallback token…`);
+      continue;
+    }
+
+    console.warn(`❌ Meta API failed via ${source}: ${result.errorMessage}`);
+  }
+
+  return null;
 }
 
 // Fetch official Facebook Page profile picture logo
@@ -190,12 +234,17 @@ export async function detectNewAds(groupId: string): Promise<any[]> {
   const keywords = group.keywords.split(';').map((k) => k.trim()).filter(Boolean);
   const matchedKeyword = keywords[Math.floor(Math.random() * keywords.length)] || group.name;
 
-  const accessToken = user?.metaAccessToken || process.env.META_ACCESS_TOKEN;
-  let liveAdsFromMeta = null;
+  // Prefer Railway META_ACCESS_TOKEN; fall back to Settings token if needed
+  const liveAdsFromMeta = await fetchMetaAdsWithBestToken(
+    matchedKeyword,
+    group.region,
+    user?.metaAccessToken
+  );
 
-  if (accessToken) {
-    liveAdsFromMeta = await fetchMetaAdLibraryAPI(matchedKeyword, group.region, accessToken);
-  }
+  const accessToken =
+    (process.env.META_ACCESS_TOKEN || '').trim() ||
+    (user?.metaAccessToken || '').trim() ||
+    null;
 
   // Load existing meta ids + content fingerprints for this group (dedupe gate)
   const existingAds = await prisma.advertisement.findMany({

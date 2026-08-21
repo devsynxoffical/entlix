@@ -6,6 +6,7 @@ import {
   resolveAdCreativeUrl,
   resolveSourceLink,
 } from '@/lib/adCreative';
+import { purgeDuplicateAds } from '@/lib/monitoring';
 
 export async function GET(req: Request) {
   try {
@@ -16,12 +17,14 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'groupId is required' }, { status: 400 });
     }
 
+    // Remove duplicate creatives before serving the feed
+    await purgeDuplicateAds(groupId);
+
     const ads = await prisma.advertisement.findMany({
       where: { groupId },
       orderBy: { firstDetectedAt: 'desc' }
     });
 
-    // Repair bad creatives + private snapshot links that leak tokens / force login
     const repaired = await Promise.all(
       ads.map(async (ad) => {
         const needsCreativeFix = isNonImageCreativeUrl(ad.adCreativeUrl);
@@ -57,7 +60,6 @@ export async function GET(req: Request) {
       })
     );
 
-    // Always return sanitized links even if DB update skipped
     const safeAds = repaired.map((ad) => ({
       ...ad,
       adCreativeUrl: resolveAdCreativeUrl(ad.adCreativeUrl, ad.matchingKeyword),

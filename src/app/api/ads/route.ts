@@ -3,10 +3,11 @@ import prisma from '@/lib/db';
 import {
   isNonImageCreativeUrl,
   isPrivateMetaSnapshotUrl,
+  isRealMetaAdId,
   resolveAdCreativeUrl,
   resolveSourceLink,
 } from '@/lib/adCreative';
-import { purgeDuplicateAds } from '@/lib/monitoring';
+import { purgeDuplicateAds, purgeDemoAds } from '@/lib/monitoring';
 
 export async function GET(req: Request) {
   try {
@@ -17,16 +18,20 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'groupId is required' }, { status: 400 });
     }
 
-    // Remove duplicate creatives before serving the feed
+    // Remove duplicates + delete all demo/simulated ads
     await purgeDuplicateAds(groupId);
+    await purgeDemoAds(groupId);
 
     const ads = await prisma.advertisement.findMany({
       where: { groupId },
       orderBy: { firstDetectedAt: 'desc' }
     });
 
+    // Safety: never return demo rows even if purge missed something
+    const liveOnly = ads.filter((ad) => isRealMetaAdId(ad.metaAdId));
+
     const repaired = await Promise.all(
-      ads.map(async (ad) => {
+      liveOnly.map(async (ad) => {
         const needsCreativeFix = isNonImageCreativeUrl(ad.adCreativeUrl);
         const safeSource = resolveSourceLink(ad.sourceLink, ad.metaAdId);
         const needsSourceFix =
@@ -60,26 +65,11 @@ export async function GET(req: Request) {
       })
     );
 
-    const safeAds = repaired.map((ad) => {
-      const safeSource = resolveSourceLink(ad.sourceLink, ad.metaAdId);
-      return {
-        ...ad,
-        adCreativeUrl: resolveAdCreativeUrl(ad.adCreativeUrl, ad.matchingKeyword),
-        // Clear fake Meta Library URLs so UI never opens dead links
-        sourceLink: safeSource,
-      };
-    });
-
-    // Persist clearing of fake library links for demo ads
-    await Promise.all(
-      safeAds
-        .filter((ad, i) => repaired[i].sourceLink && !ad.sourceLink)
-        .map((ad) =>
-          prisma.advertisement
-            .update({ where: { id: ad.id }, data: { sourceLink: null } })
-            .catch(() => null)
-        )
-    );
+    const safeAds = repaired.map((ad) => ({
+      ...ad,
+      adCreativeUrl: resolveAdCreativeUrl(ad.adCreativeUrl, ad.matchingKeyword),
+      sourceLink: resolveSourceLink(ad.sourceLink, ad.metaAdId),
+    }));
 
     return NextResponse.json(safeAds);
   } catch (error) {

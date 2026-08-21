@@ -1,5 +1,5 @@
 import prisma from './db';
-import { getCreativeForKeyword } from './adCreative';
+import { getCreativeForKeyword, isRealMetaAdId } from './adCreative';
 import { resolveMetaCountry } from './regions';
 
 /** Stable fingerprint to catch near-duplicate creatives (same page + same copy). */
@@ -11,11 +11,6 @@ export function adContentFingerprint(advertiserName?: string | null, adText?: st
     .replace(/\s+/g, ' ')
     .slice(0, 400);
   return `${name}||${text}`;
-}
-
-function todayKey(): string {
-  const d = new Date();
-  return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(d.getUTCDate()).padStart(2, '0')}`;
 }
 
 /** Remove duplicate rows in a group (keep oldest). Same metaAdId or same content fingerprint. */
@@ -157,48 +152,24 @@ export async function fetchMetaPageLogo(pageId: string, accessToken: string): Pr
 }
 
 export async function runInitialBaseline(groupId: string) {
-  const group = await prisma.monitoringGroup.findUnique({
-    where: { id: groupId }
-  });
+  // No demo/mock ads — wait for live Meta Ads Library results on scan.
+  const group = await prisma.monitoringGroup.findUnique({ where: { id: groupId } });
   if (!group) return;
+}
 
-  const keywords = group.keywords.split(';').map(k => k.trim()).filter(Boolean);
-  if (keywords.length === 0) keywords.push(group.name);
+/** Delete simulated/demo ads (fake metaAdId prefixes or non-numeric archive ids). */
+export async function purgeDemoAds(groupId?: string): Promise<number> {
+  const ads = await prisma.advertisement.findMany({
+    where: groupId ? { groupId } : undefined,
+    select: { id: true, metaAdId: true },
+  });
 
-  // Check existing ads for group
-  const existingCount = await prisma.advertisement.count({ where: { groupId } });
-  if (existingCount > 0) return;
+  const toDelete = ads.filter((a) => !isRealMetaAdId(a.metaAdId)).map((a) => a.id);
+  if (toDelete.length === 0) return 0;
 
-  const mockInitialAds = [];
-  const adCountToGenerate = Math.min(Math.max(keywords.length * 3, 4), 10);
-
-  for (let i = 0; i < adCountToGenerate; i++) {
-    const kw = keywords[i % keywords.length];
-    const advertiser = generateAdvertiserName(kw);
-    const text = generateAdText(kw, group.region);
-    const creative = getCreativeForKeyword(kw);
-    const whatsapp = extractWhatsAppContact(text);
-    const daysAgo = Math.floor(Math.random() * 25) + 3;
-
-    mockInitialAds.push({
-      groupId: group.id,
-      metaAdId: `meta_ad_${Math.random().toString(36).substring(2, 10)}`,
-      advertiserName: advertiser,
-      adText: text,
-      adCreativeUrl: creative,
-      matchingKeyword: kw,
-      region: group.region,
-      whatsappContact: whatsapp,
-      startDate: new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000),
-      firstDetectedAt: new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000),
-      classification: 'EXISTING',
-      sourceLink: null, // Demo baseline — no fake Meta Library id
-    });
-  }
-
-  for (const adData of mockInitialAds) {
-    await prisma.advertisement.create({ data: adData });
-  }
+  await prisma.advertisement.deleteMany({ where: { id: { in: toDelete } } });
+  console.log(`🧹 Removed ${toDelete.length} demo/simulated ad(s)`);
+  return toDelete.length;
 }
 
 export async function detectNewAds(groupId: string): Promise<any[]> {
@@ -207,8 +178,9 @@ export async function detectNewAds(groupId: string): Promise<any[]> {
   });
   if (!group) return [];
 
-  // Clean existing duplicates before inserting more
+  // Clean existing duplicates + remove any leftover demo ads
   await purgeDuplicateAds(group.id);
+  await purgeDemoAds(group.id);
 
   const gUserId = (group as any).userId;
   const user = gUserId
@@ -305,24 +277,10 @@ export async function detectNewAds(groupId: string): Promise<any[]> {
       });
     }
   } else {
-    // Simulation fallback — deterministic id per group/keyword/day so hourly cron cannot spam duplicates
-    const simId = `sim_${group.id.slice(0, 8)}_${matchedKeyword.toLowerCase().replace(/\s+/g, '_')}_${todayKey()}`;
-    if (!existingMetaIds.has(simId)) {
-      const advertiser = generateAdvertiserName(matchedKeyword);
-      const text = generateAdText(matchedKeyword, group.region);
-      await tryCreate({
-        metaAdId: simId,
-        advertiserName: advertiser,
-        adText: text,
-        adCreativeUrl: getCreativeForKeyword(matchedKeyword),
-        matchingKeyword: matchedKeyword,
-        region: group.region,
-        whatsappContact: extractWhatsAppContact(text),
-        startDate: new Date(),
-        classification: 'NEW',
-        sourceLink: null, // Demo simulation — Meta Library link only for live Meta archive ids
-      });
-    }
+    // No live Meta results — do not create demo/simulated ads
+    console.log(
+      `ℹ️ No live Meta ads for group ${group.name} (keyword: ${matchedKeyword}). Skipping demo fallback.`
+    );
   }
 
   // Email is sent by the caller (cron / scan-all) as ONE bulk summary — not per ad here.

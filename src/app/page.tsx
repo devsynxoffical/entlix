@@ -20,7 +20,6 @@ export default function LandingPage() {
           </nav>
 
           <div className="flex items-center gap-3">
-            <Link href="/auth/signin" className="text-sm font-semibold text-slate-600 hover:text-purple-600 transition-colors hidden sm:block">Sign In</Link>
             <Link href="/auth/signin" className="btn btn-primary text-sm px-4 py-2 shadow-lg shadow-purple-500/20">
               Sign In
             </Link>

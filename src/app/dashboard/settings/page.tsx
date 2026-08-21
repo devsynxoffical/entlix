@@ -1,15 +1,16 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Save, Key, Bell, Globe, CheckCircle2, MessageSquare, Hash } from 'lucide-react';
+import { Save, Key, Bell, Globe, CheckCircle2, MessageSquare, Hash, Mail } from 'lucide-react';
 
 export default function SettingsPage() {
+  const [accountEmail, setAccountEmail] = useState('');
   const [defaultRegion, setDefaultRegion] = useState('Global');
   const [emailAlerts, setEmailAlerts] = useState(true);
   const [metaAccessToken, setMetaAccessToken] = useState('');
   const [slackWebhookUrl, setSlackWebhookUrl] = useState('');
   const [discordWebhookUrl, setDiscordWebhookUrl] = useState('');
-  
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -19,6 +20,7 @@ export default function SettingsPage() {
       .then(res => res.json())
       .then(data => {
         if (data) {
+          if (data.email) setAccountEmail(data.email);
           if (data.defaultRegion) setDefaultRegion(data.defaultRegion);
           if (data.emailAlerts !== undefined) setEmailAlerts(data.emailAlerts);
           if (data.metaAccessToken) setMetaAccessToken(data.metaAccessToken);
@@ -67,7 +69,7 @@ export default function SettingsPage() {
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-black text-slate-900 tracking-tight font-hero">System & Integration Settings</h1>
         <p className="text-sm text-slate-500 font-medium">
-          Manage your Meta Graph API credentials, alert destinations, and default search regions.
+          Manage Meta credentials, hourly lead emails, and alert destinations.
         </p>
       </div>
 
@@ -79,31 +81,61 @@ export default function SettingsPage() {
       )}
 
       <form onSubmit={handleSave} className="flex flex-col gap-6">
-        {/* Meta Graph API Credentials */}
+        <div className="glass-card p-6 border border-slate-200/80 rounded-2xl flex flex-col gap-4">
+          <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+            <Mail className="text-purple-600" size={20} />
+            <h2 className="text-base font-bold text-slate-900">Hourly New Lead Emails</h2>
+          </div>
+
+          <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-1">Alerts are sent to</p>
+            <p className="text-sm font-bold text-slate-900 break-all">
+              {accountEmail || 'your login email'}
+            </p>
+            <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+              This is your Entiix account email (the one you signed in with). Every hour Entiix scans active monitoring groups; when a new ad is found, an email is sent here automatically.
+            </p>
+          </div>
+
+          <label className="flex items-start gap-3 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={emailAlerts}
+              onChange={(e) => setEmailAlerts(e.target.checked)}
+              className="mt-1 h-4 w-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+            />
+            <span>
+              <span className="block text-sm font-bold text-slate-900">Enable email alerts for new ads</span>
+              <span className="block text-xs text-slate-500 mt-0.5">
+                Turn off to stop hourly lead emails (scans still run; you just will not get mail).
+              </span>
+            </span>
+          </label>
+        </div>
+
         <div className="glass-card p-6 border border-slate-200/80 rounded-2xl flex flex-col gap-4">
           <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
             <Key className="text-purple-600" size={20} />
             <h2 className="text-base font-bold text-slate-900">Meta Graph API Access Token</h2>
           </div>
-          
+
           <div className="flex flex-col gap-2">
             <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">
               User Access Token (Required for Live Meta Ad Library Queries)
             </label>
-            <input 
-              type="password" 
-              placeholder="EAAU9woPMKn4BS..." 
+            <input
+              type="password"
+              placeholder="EAAU9woPMKn4BS..."
               value={metaAccessToken}
               onChange={e => setMetaAccessToken(e.target.value)}
               className="input-field text-sm font-mono"
             />
             <p className="text-xs text-slate-400 leading-relaxed">
-              Required to fetch live ads directly from Meta Ad Library Graph API (`ads_archive`). Generate your token in Meta Developer Portal with `ads_read` permission.
+              Required to fetch live ads from Meta Ad Library Graph API. Generate a token with ads_read permission.
             </p>
           </div>
         </div>
 
-        {/* Live Notification Webhooks */}
         <div className="glass-card p-6 border border-slate-200/80 rounded-2xl flex flex-col gap-4">
           <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
             <Bell className="text-purple-600" size={20} />
@@ -116,9 +148,9 @@ export default function SettingsPage() {
                 <Hash size={14} className="text-emerald-600" />
                 Slack Incoming Webhook URL
               </label>
-              <input 
-                type="url" 
-                placeholder="https://hooks.slack.com/services/..." 
+              <input
+                type="url"
+                placeholder="https://hooks.slack.com/services/..."
                 value={slackWebhookUrl}
                 onChange={e => setSlackWebhookUrl(e.target.value)}
                 className="input-field text-xs font-mono"
@@ -130,9 +162,9 @@ export default function SettingsPage() {
                 <MessageSquare size={14} className="text-indigo-600" />
                 Discord Webhook URL
               </label>
-              <input 
-                type="url" 
-                placeholder="https://discord.com/api/webhooks/..." 
+              <input
+                type="url"
+                placeholder="https://discord.com/api/webhooks/..."
                 value={discordWebhookUrl}
                 onChange={e => setDiscordWebhookUrl(e.target.value)}
                 className="input-field text-xs font-mono"
@@ -141,7 +173,6 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Default Regional Search Preferences */}
         <div className="glass-card p-6 border border-slate-200/80 rounded-2xl flex flex-col gap-4">
           <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
             <Globe className="text-purple-600" size={20} />
@@ -152,7 +183,7 @@ export default function SettingsPage() {
             <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">
               Default Region for New Monitoring Groups
             </label>
-            <select 
+            <select
               value={defaultRegion}
               onChange={e => setDefaultRegion(e.target.value)}
               className="input-field text-sm font-semibold max-w-xs"
@@ -167,10 +198,9 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Save Button */}
         <div className="flex justify-end">
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             disabled={saving}
             className="btn btn-primary py-3 px-6 text-sm font-bold gap-2 shadow-lg shadow-purple-500/20"
           >

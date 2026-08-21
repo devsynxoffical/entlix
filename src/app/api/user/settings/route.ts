@@ -26,6 +26,7 @@ export async function GET() {
     }
 
     return NextResponse.json({
+      email: user.email,
       defaultRegion: user.defaultRegion || 'Global',
       emailAlerts: user.emailAlerts !== false,
       metaAccessToken: user.metaAccessToken || '',

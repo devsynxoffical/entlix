@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ExternalLink, Clock, Tag, MapPin, Copy, Check, Eye, X, MessageSquare, Star, Sparkles, Building2, Globe, Loader2 } from 'lucide-react';
 
 export default function AdCard({ ad, onFavoriteToggle }: { ad: any; onFavoriteToggle?: (id: string, isFav: boolean) => void }) {
@@ -17,6 +17,18 @@ export default function AdCard({ ad, onFavoriteToggle }: { ad: any; onFavoriteTo
   const [aiAnalysis, setAiAnalysis] = useState<any>(null);
   const [loadingAi, setLoadingAi] = useState(false);
   const [activeTab, setActiveTab] = useState<'DETAILS' | 'AI_COUNTER'>('DETAILS');
+
+  // Prevent background scrolling when modal opens
+  useEffect(() => {
+    if (showModal || showDossierModal) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [showModal, showDossierModal]);
 
   const copyLink = (e: React.MouseEvent) => {
     e.stopPropagation();

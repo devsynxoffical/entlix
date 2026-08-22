@@ -9,10 +9,10 @@ export type DateFilter =
 export type SortOrder = 'NEWEST' | 'OLDEST';
 
 export const DATE_FILTER_OPTIONS: { value: DateFilter; label: string }[] = [
-  { value: 'ALL', label: 'All time' },
+  { value: 'LAST_7_DAYS', label: 'Last 7 days' },
   { value: 'TODAY', label: 'Today' },
   { value: 'YESTERDAY', label: 'Yesterday' },
-  { value: 'LAST_7_DAYS', label: 'Last 7 days' },
+  { value: 'ALL', label: 'All time' },
   { value: 'LAST_30_DAYS', label: 'Last 30 days' },
   { value: 'OLDER', label: 'Older (30+ days)' },
 ];

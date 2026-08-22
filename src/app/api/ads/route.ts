@@ -8,7 +8,7 @@ import {
   isDisplayableImageUrl,
   resolveSourceLink,
 } from '@/lib/adCreative';
-import { purgeDuplicateAds, purgeDemoAds } from '@/lib/monitoring';
+import { purgeDuplicateAds, purgeDemoAds, purgeExpiredAds } from '@/lib/monitoring';
 
 export async function GET(req: Request) {
   try {
@@ -22,6 +22,7 @@ export async function GET(req: Request) {
     // Remove duplicates + delete all demo/simulated ads
     await purgeDuplicateAds(groupId);
     await purgeDemoAds(groupId);
+    await purgeExpiredAds(groupId);
 
     const ads = await prisma.advertisement.findMany({
       where: { groupId },

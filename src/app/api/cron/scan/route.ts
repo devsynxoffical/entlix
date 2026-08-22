@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/db';
-import { detectNewAds, purgeDuplicateAds } from '@/lib/monitoring';
+import { detectNewAds, purgeDuplicateAds, purgeExpiredAds } from '@/lib/monitoring';
 import { sendBulkScanAlert } from '@/lib/email';
 
 // GET or POST /api/cron/scan – automated hourly scan
@@ -36,6 +36,7 @@ async function handleCronScan(req: Request) {
   try {
     // Global duplicate cleanup first
     const purged = await purgeDuplicateAds();
+    const expiredPurged = await purgeExpiredAds();
 
     const activeGroups = await prisma.monitoringGroup.findMany({
       where: { status: 'ACTIVE' },
@@ -68,7 +69,7 @@ async function handleCronScan(req: Request) {
     }
 
     console.log(
-      `⏰ [HOURLY CRON] Scanned ${activeGroups.length} group(s). ${allNewAds.length} new unique ad(s). Purged ${purged} duplicate(s).`
+      `⏰ [HOURLY CRON] Scanned ${activeGroups.length} group(s). ${allNewAds.length} new unique ad(s). Purged ${purged} duplicate(s), ${expiredPurged} expired.`
     );
 
     return NextResponse.json({
@@ -76,6 +77,7 @@ async function handleCronScan(req: Request) {
       scannedGroups: activeGroups.length,
       newAdsDetected: allNewAds.length,
       duplicatesRemoved: purged,
+      expiredRemoved: expiredPurged,
       emailSent: !!emailResult?.sent,
       message:
         allNewAds.length > 0

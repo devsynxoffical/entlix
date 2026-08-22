@@ -6,7 +6,29 @@ import {
 } from './metaAdFields';
 import { formatMetaCountriesParam, resolveMetaCountries } from './regions';
 
-/** Stable fingerprint to catch near-duplicate creatives (same page + same copy). */
+export const AD_RETENTION_DAYS = 7;
+
+/** Remove ads older than the retention window (default 7 days). */
+export async function purgeExpiredAds(groupId?: string): Promise<number> {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - AD_RETENTION_DAYS);
+  cutoff.setHours(0, 0, 0, 0);
+
+  const result = await prisma.advertisement.deleteMany({
+    where: {
+      ...(groupId ? { groupId } : {}),
+      firstDetectedAt: { lt: cutoff },
+    },
+  });
+
+  if (result.count > 0) {
+    console.log(
+      `🗑️ Purged ${result.count} ad(s) older than ${AD_RETENTION_DAYS} days${groupId ? ` in group ${groupId}` : ''}`
+    );
+  }
+  return result.count;
+}
+
 export function adContentFingerprint(advertiserName?: string | null, adText?: string | null): string {
   const name = (advertiserName || '').trim().toLowerCase().replace(/\s+/g, ' ');
   const text = (adText || '')
@@ -207,6 +229,7 @@ export async function detectNewAds(groupId: string): Promise<any[]> {
 
   await purgeDuplicateAds(group.id);
   await purgeDemoAds(group.id);
+  await purgeExpiredAds(group.id);
 
   const gUserId = (group as any).userId;
   const user = gUserId

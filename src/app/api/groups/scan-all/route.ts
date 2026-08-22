@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/db';
-import { detectNewAds, purgeDuplicateAds } from '@/lib/monitoring';
+import { detectNewAds, purgeDuplicateAds, purgeExpiredAds } from '@/lib/monitoring';
 import { sendBulkScanAlert } from '@/lib/email';
 
 // POST /api/groups/scan-all – trigger scan for all ACTIVE groups
 export async function POST() {
   try {
     const purged = await purgeDuplicateAds();
+    const expiredPurged = await purgeExpiredAds();
 
     const activeGroups = await prisma.monitoringGroup.findMany({
       where: { status: 'ACTIVE' },

@@ -30,7 +30,7 @@ export default function ResultsDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('ALL'); // ALL, NEW, EXISTING, FAVORITE
   const [copyLengthFilter, setCopyLengthFilter] = useState('ALL'); // ALL, SHORT, LONG
-  const [dateFilter, setDateFilter] = useState<DateFilter>('ALL');
+  const [dateFilter, setDateFilter] = useState<DateFilter>('LAST_7_DAYS');
   const [sortOrder, setSortOrder] = useState<SortOrder>('NEWEST');
 
   // Root Modal States
@@ -227,58 +227,65 @@ export default function ResultsDashboard() {
   }
 
   return (
-    <div className="flex flex-col gap-5 relative">
+    <div className="flex flex-col gap-4 relative">
       {/* Toolbar */}
-      <div className="flex flex-col gap-3 p-4 bg-slate-50/90 rounded-2xl border border-slate-200/80">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wide whitespace-nowrap">Group</label>
+      <div className="flex flex-col gap-3 p-4 sm:p-5 border-b border-slate-100 bg-slate-50/50">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 min-w-0 flex-1">
+            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide shrink-0">
+              Group
+            </label>
             <select
-              className="input-field py-2 text-sm max-w-full sm:max-w-xs font-semibold bg-white flex-1"
+              className="toolbar-select sm:max-w-sm"
               value={selectedGroupId}
-              onChange={e => setSelectedGroupId(e.target.value)}
+              onChange={(e) => setSelectedGroupId(e.target.value)}
             >
-              {groups.map(g => (
+              {groups.map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.name} ({g._count?.advertisements ?? 0} ads)
                 </option>
               ))}
             </select>
           </div>
-          <div className="flex gap-2 flex-wrap items-center">
+          <div className="flex gap-2 shrink-0">
             <button
               onClick={exportToCSV}
               disabled={filteredAds.length === 0}
-              className="btn btn-secondary text-sm py-2 px-3 gap-1.5 bg-white"
+              className="btn btn-secondary text-sm py-2 px-3 gap-1.5 bg-white h-10"
               title="Export Lead List to CSV/Excel"
             >
               <Download size={14} className="text-purple-600" />
               <span className="hidden sm:inline">Export CSV</span>
             </button>
-            <button onClick={reload} className="btn btn-secondary text-sm py-2 px-3 gap-1.5 bg-white" title="Refresh Feed">
+            <button
+              onClick={reload}
+              className="btn btn-secondary text-sm py-2 px-3 gap-1.5 bg-white h-10"
+              title="Refresh Feed"
+            >
               <RefreshCw size={14} className={adsLoading ? 'animate-spin text-purple-600' : ''} />
               <span className="hidden sm:inline">Refresh</span>
             </button>
           </div>
         </div>
 
-        <div className="flex gap-2 flex-wrap items-center">
-          <div className="relative flex-1 min-w-[180px]">
-            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search ads, WhatsApp..."
-              className="input-field text-sm py-2 pl-9 bg-white w-full"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-            />
-          </div>
-          <div className="relative">
-            <Filter size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <div className="relative">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Search ads, WhatsApp..."
+            className="toolbar-input pl-9"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+          <div className="relative col-span-2 lg:col-span-1">
+            <Filter size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             <select
-              className="input-field text-sm py-2 pl-9 font-medium bg-white"
+              className="toolbar-select pl-8"
               value={filterType}
-              onChange={e => setFilterType(e.target.value)}
+              onChange={(e) => setFilterType(e.target.value)}
             >
               <option value="ALL">All Status</option>
               <option value="NEW">New Ads Only</option>
@@ -287,7 +294,7 @@ export default function ResultsDashboard() {
             </select>
           </div>
           <select
-            className="input-field text-sm py-2 font-medium bg-white"
+            className="toolbar-select"
             value={dateFilter}
             onChange={(e) => setDateFilter(e.target.value as DateFilter)}
           >
@@ -298,7 +305,7 @@ export default function ResultsDashboard() {
             ))}
           </select>
           <select
-            className="input-field text-sm py-2 font-medium bg-white"
+            className="toolbar-select"
             value={sortOrder}
             onChange={(e) => setSortOrder(e.target.value as SortOrder)}
           >
@@ -309,18 +316,19 @@ export default function ResultsDashboard() {
             ))}
           </select>
           <select
-            className="input-field text-sm py-2 font-medium bg-white"
+            className="toolbar-select col-span-2 lg:col-span-1"
             value={copyLengthFilter}
-            onChange={e => setCopyLengthFilter(e.target.value)}
+            onChange={(e) => setCopyLengthFilter(e.target.value)}
           >
             <option value="ALL">All Copy Lengths</option>
-            <option value="SHORT">Short-form (&le;30 words)</option>
-            <option value="LONG">Long-form (&gt;30 words)</option>
+            <option value="SHORT">Short (&le;30 words)</option>
+            <option value="LONG">Long (&gt;30 words)</option>
           </select>
         </div>
       </div>
 
-      {/* Feed Status Summary */}
+      {/* Feed body */}
+      <div className="px-4 sm:px-5 pb-5 flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-sm text-slate-600 font-semibold">
@@ -378,6 +386,7 @@ export default function ResultsDashboard() {
           }
         </div>
       )}
+      </div>
 
       {/* Portaled modals — rendered on document.body so they aren't clipped by content-area overflow */}
       {mounted && selectedAd && createPortal(

@@ -5,6 +5,16 @@ import { createPortal } from 'react-dom';
 import AdCard from './AdCard';
 import AdCreativePreview from './AdCreativePreview';
 import { resolveSourceLink, isSimulatedAd } from '@/lib/adCreative';
+import {
+  DATE_FILTER_OPTIONS,
+  SORT_ORDER_OPTIONS,
+  type DateFilter,
+  type SortOrder,
+  dateFilterLabel,
+  formatDetectedLabel,
+  matchesDateFilter,
+  sortAdsByDetected,
+} from '@/lib/adDateFilters';
 import { 
   Search, Filter, Loader2, RefreshCw, AlertCircle, Download, 
   X, ExternalLink, Copy, Check, MessageSquare, Tag, MapPin, 
@@ -20,6 +30,8 @@ export default function ResultsDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('ALL'); // ALL, NEW, EXISTING, FAVORITE
   const [copyLengthFilter, setCopyLengthFilter] = useState('ALL'); // ALL, SHORT, LONG
+  const [dateFilter, setDateFilter] = useState<DateFilter>('ALL');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('NEWEST');
 
   // Root Modal States
   const [selectedAd, setSelectedAd] = useState<any>(null);
@@ -139,40 +151,49 @@ export default function ResultsDashboard() {
     : null;
   const selectedIsDemo = selectedAd ? isSimulatedAd(selectedAd.metaAdId) : false;
 
-  const filteredAds = ads.filter(ad => {
-    const q = searchQuery.toLowerCase();
-    const matchesSearch = !q ||
-      ad.advertiserName?.toLowerCase().includes(q) ||
-      ad.adText?.toLowerCase().includes(q) ||
-      ad.matchingKeyword?.toLowerCase().includes(q) ||
-      ad.region?.toLowerCase().includes(q) ||
-      ad.whatsappContact?.toLowerCase().includes(q);
+  const filteredAds = sortAdsByDetected(
+    ads.filter((ad) => {
+      const q = searchQuery.toLowerCase();
+      const matchesSearch =
+        !q ||
+        ad.advertiserName?.toLowerCase().includes(q) ||
+        ad.adText?.toLowerCase().includes(q) ||
+        ad.adTitle?.toLowerCase().includes(q) ||
+        ad.matchingKeyword?.toLowerCase().includes(q) ||
+        ad.region?.toLowerCase().includes(q) ||
+        ad.whatsappContact?.toLowerCase().includes(q);
 
-    let matchesFilter = true;
-    if (filterType === 'NEW') matchesFilter = ad.classification === 'NEW';
-    else if (filterType === 'EXISTING') matchesFilter = ad.classification === 'EXISTING';
-    else if (filterType === 'FAVORITE') matchesFilter = !!ad.isFavorite;
+      let matchesFilter = true;
+      if (filterType === 'NEW') matchesFilter = ad.classification === 'NEW';
+      else if (filterType === 'EXISTING') matchesFilter = ad.classification === 'EXISTING';
+      else if (filterType === 'FAVORITE') matchesFilter = !!ad.isFavorite;
 
-    let matchesCopyLength = true;
-    const wordCount = (ad.adText || '').split(/\s+/).length;
-    if (copyLengthFilter === 'SHORT') matchesCopyLength = wordCount <= 30;
-    else if (copyLengthFilter === 'LONG') matchesCopyLength = wordCount > 30;
+      let matchesCopyLength = true;
+      const wordCount = (ad.adText || '').split(/\s+/).length;
+      if (copyLengthFilter === 'SHORT') matchesCopyLength = wordCount <= 30;
+      else if (copyLengthFilter === 'LONG') matchesCopyLength = wordCount > 30;
 
-    return matchesSearch && matchesFilter && matchesCopyLength;
-  });
+      const matchesDate = matchesDateFilter(ad.firstDetectedAt, dateFilter);
+
+      return matchesSearch && matchesFilter && matchesCopyLength && matchesDate;
+    }),
+    sortOrder
+  );
 
   // Export filtered ad leads to CSV
   const exportToCSV = () => {
     if (filteredAds.length === 0) return;
 
-    const headers = ['Advertiser Name', 'Classification', 'Matching Keyword', 'Region', 'WhatsApp Contact', 'Ad Text', 'Detected Date', 'Source Link'];
+    const headers = ['Advertiser Name', 'Classification', 'Matching Keyword', 'Region', 'Ad Title', 'Ad Description', 'Ad Body', 'WhatsApp Contact', 'Detected Date', 'Source Link'];
     const rows = filteredAds.map(ad => [
       `"${(ad.advertiserName || '').replace(/"/g, '""')}"`,
       `"${ad.classification || ''}"`,
       `"${(ad.matchingKeyword || '').replace(/"/g, '""')}"`,
       `"${(ad.region || '').replace(/"/g, '""')}"`,
-      `"${ad.whatsappContact || ''}"`,
+      `"${(ad.adTitle || '').replace(/"/g, '""')}"`,
+      `"${(ad.adDescription || '').replace(/"/g, '""')}"`,
       `"${(ad.adText || '').replace(/"/g, '""')}"`,
+      `"${ad.whatsappContact || ''}"`,
       `"${new Date(ad.firstDetectedAt).toLocaleString()}"`,
       `"${resolveSourceLink(ad.sourceLink, ad.metaAdId) || ''}"`
     ]);
@@ -267,6 +288,28 @@ export default function ResultsDashboard() {
           </div>
           <select
             className="input-field text-sm py-2 font-medium bg-white"
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value as DateFilter)}
+          >
+            {DATE_FILTER_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <select
+            className="input-field text-sm py-2 font-medium bg-white"
+            value={sortOrder}
+            onChange={(e) => setSortOrder(e.target.value as SortOrder)}
+          >
+            {SORT_ORDER_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <select
+            className="input-field text-sm py-2 font-medium bg-white"
             value={copyLengthFilter}
             onChange={e => setCopyLengthFilter(e.target.value)}
           >
@@ -285,7 +328,17 @@ export default function ResultsDashboard() {
           </span>
           {filterType !== 'ALL' && (
             <span className="text-xs bg-purple-100 text-purple-700 px-2.5 py-0.5 rounded-full font-bold">
-              Filter: {filterType}
+              Status: {filterType}
+            </span>
+          )}
+          {dateFilter !== 'ALL' && (
+            <span className="text-xs bg-cyan-100 text-cyan-800 px-2.5 py-0.5 rounded-full font-bold">
+              {dateFilterLabel(dateFilter)}
+            </span>
+          )}
+          {sortOrder === 'OLDEST' && (
+            <span className="text-xs bg-slate-200 text-slate-700 px-2.5 py-0.5 rounded-full font-bold">
+              Oldest first
             </span>
           )}
         </div>
@@ -399,8 +452,21 @@ export default function ResultsDashboard() {
                     </span>
                   </div>
 
-                  <div className="p-4 text-xs sm:text-sm text-slate-800 leading-relaxed whitespace-pre-wrap font-normal">
-                    {selectedAd.adText || 'No ad description available for this placement.'}
+                  <div className="p-4 text-xs sm:text-sm text-slate-800 leading-relaxed whitespace-pre-wrap font-normal space-y-2">
+                    {selectedAd.adTitle && (
+                      <p className="font-bold text-slate-900 text-sm">{selectedAd.adTitle}</p>
+                    )}
+                    {selectedAd.adDescription && (
+                      <p className="text-slate-600">{selectedAd.adDescription}</p>
+                    )}
+                    {selectedAd.adText ? (
+                      <p>{selectedAd.adText}</p>
+                    ) : (
+                      !selectedAd.adTitle &&
+                      !selectedAd.adDescription && (
+                        <p className="text-slate-400">No ad copy available from Meta for this placement.</p>
+                      )
+                    )}
                   </div>
 
                   <AdCreativePreview
@@ -416,7 +482,7 @@ export default function ResultsDashboard() {
                         {selectedAd.advertiserLink || 'FACEBOOK.COM/ADS'}
                       </span>
                       <span className="text-xs font-bold text-slate-800 truncate">
-                        {selectedAd.matchingKeyword ? `${selectedAd.matchingKeyword.toUpperCase()} Offer` : 'Special Promo'}
+                        {selectedAd.adTitle || selectedAd.advertiserLink || selectedAd.advertiserName}
                       </span>
                     </div>
                     {selectedLiveUrl ? (

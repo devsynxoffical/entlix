@@ -29,6 +29,8 @@ model Advertisement {
   advertiserLogo   String?         // Real Facebook Page profile picture URL
   advertiserLink   String?
   adText           String?
+  adTitle          String?         // Meta ad_creative_link_titles (headline)
+  adDescription    String?         // Meta ad_creative_link_descriptions
   adCreativeUrl    String?
   creativeType     String          @default("IMAGE") // IMAGE, VIDEO, CAROUSEL
   matchingKeyword  String

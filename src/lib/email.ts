@@ -135,16 +135,27 @@ export async function sendBulkScanAlert(opts: {
     .slice(0, 40)
     .map((ad, i) => {
       const link = resolveSourceLink(ad.sourceLink, ad.metaAdId);
-      const text = escapeHtml(String(ad.adText || 'No copy').slice(0, 160));
+      const title = escapeHtml(String(ad.adTitle || '—').slice(0, 120));
+      const description = escapeHtml(String(ad.adDescription || '—').slice(0, 140));
+      const body = escapeHtml(String(ad.adText || '—').slice(0, 180));
+      const groupName = escapeHtml(String(ad.groupName || 'Monitoring group'));
+      const keyword = escapeHtml(String(ad.matchingKeyword || '—'));
+      const region = escapeHtml(String(ad.region || '—'));
+
       return `
         <tr>
           <td style="padding:10px 8px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#64748b;vertical-align:top;">${i + 1}</td>
-          <td style="padding:10px 8px;border-bottom:1px solid #e2e8f0;font-size:13px;vertical-align:top;">
+          <td style="padding:10px 8px;border-bottom:1px solid #e2e8f0;font-size:12px;vertical-align:top;">
             <strong style="color:#0f172a;">${escapeHtml(ad.advertiserName || 'Unknown')}</strong><br/>
-            <span style="color:#7c3aed;font-size:12px;">#${escapeHtml(ad.matchingKeyword || '')}</span>
-            <span style="color:#94a3b8;font-size:12px;"> · ${escapeHtml(ad.region || '')}</span>
+            <span style="color:#64748b;font-size:11px;">Group: ${groupName}</span><br/>
+            <span style="color:#7c3aed;font-size:12px;font-weight:700;">Keyword: ${keyword}</span>
+            <span style="color:#94a3b8;font-size:12px;"> · Region: ${region}</span>
           </td>
-          <td style="padding:10px 8px;border-bottom:1px solid #e2e8f0;font-size:12px;color:#475569;vertical-align:top;">${text}${String(ad.adText || '').length > 160 ? '…' : ''}</td>
+          <td style="padding:10px 8px;border-bottom:1px solid #e2e8f0;font-size:12px;color:#0f172a;vertical-align:top;">
+            <strong>Title:</strong> ${title}<br/>
+            <span style="color:#475569;"><strong>Description:</strong> ${description}</span>
+          </td>
+          <td style="padding:10px 8px;border-bottom:1px solid #e2e8f0;font-size:12px;color:#475569;vertical-align:top;">${body}${String(ad.adText || '').length > 180 ? '…' : ''}</td>
           <td style="padding:10px 8px;border-bottom:1px solid #e2e8f0;font-size:12px;vertical-align:top;white-space:nowrap;">
             ${link ? `<a href="${link}" style="color:#7c3aed;font-weight:700;text-decoration:none;">Open</a>` : '—'}
             ${ad.whatsappContact ? `<br/><a href="https://wa.me/${String(ad.whatsappContact).replace(/[^0-9]/g, '')}" style="color:#16a34a;font-weight:700;text-decoration:none;">WhatsApp</a>` : ''}
@@ -176,8 +187,9 @@ export async function sendBulkScanAlert(opts: {
             <thead>
               <tr style="background:#f8fafc;text-align:left;">
                 <th style="padding:8px;font-size:11px;text-transform:uppercase;color:#94a3b8;border-bottom:1px solid #e2e8f0;">#</th>
-                <th style="padding:8px;font-size:11px;text-transform:uppercase;color:#94a3b8;border-bottom:1px solid #e2e8f0;">Advertiser</th>
-                <th style="padding:8px;font-size:11px;text-transform:uppercase;color:#94a3b8;border-bottom:1px solid #e2e8f0;">Ad copy</th>
+                <th style="padding:8px;font-size:11px;text-transform:uppercase;color:#94a3b8;border-bottom:1px solid #e2e8f0;">Advertiser / Group</th>
+                <th style="padding:8px;font-size:11px;text-transform:uppercase;color:#94a3b8;border-bottom:1px solid #e2e8f0;">Title &amp; description</th>
+                <th style="padding:8px;font-size:11px;text-transform:uppercase;color:#94a3b8;border-bottom:1px solid #e2e8f0;">Ad body</th>
                 <th style="padding:8px;font-size:11px;text-transform:uppercase;color:#94a3b8;border-bottom:1px solid #e2e8f0;">Links</th>
               </tr>
             </thead>

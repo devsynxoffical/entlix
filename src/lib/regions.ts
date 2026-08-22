@@ -18,12 +18,23 @@ export const REGION_OPTIONS: { value: string; label: string; countryCode: string
   { value: 'Hungary', label: 'Hungary (HU)', countryCode: 'HU' },
 ];
 
-export function resolveMetaCountry(region: string): string {
-  const r = (region || '').trim().toUpperCase();
+/** ISO country codes for Meta Ads Library `ad_reached_countries`. */
+export function resolveMetaCountries(region: string): string[] {
+  const r = (region || '').trim();
+  const upper = r.toUpperCase();
+
+  if (upper === 'GLOBAL' || upper === 'GLOBAL / WORLDWIDE' || upper === 'WORLDWIDE') {
+    return ['US', 'GB', 'IN', 'PK', 'BD', 'CA', 'AU', 'DE', 'BR', 'MX', 'PT', 'MY', 'SG', 'SE', 'HU'];
+  }
+
+  if (upper === 'EUROPE' || upper === 'EU') {
+    return ['GB', 'DE', 'FR', 'IT', 'ES', 'NL', 'SE', 'PT', 'HU'];
+  }
+
   const fromList = REGION_OPTIONS.find(
-    (o) => o.value.toUpperCase() === r || o.countryCode === r
+    (o) => o.value.toUpperCase() === upper || o.countryCode === upper
   );
-  if (fromList) return fromList.countryCode;
+  if (fromList) return [fromList.countryCode];
 
   const aliases: Record<string, string> = {
     UK: 'GB',
@@ -36,7 +47,17 @@ export function resolveMetaCountry(region: string): string {
     SWEDAN: 'SE',
     HUNGRY: 'HU',
   };
-  if (aliases[r]) return aliases[r];
-  if (/^[A-Z]{2}$/.test(r)) return r;
-  return 'US';
+  if (aliases[upper]) return [aliases[upper]];
+  if (/^[A-Z]{2}$/.test(upper)) return [upper];
+
+  return ['US'];
+}
+
+export function formatMetaCountriesParam(countries: string[]): string {
+  const unique = Array.from(new Set(countries.map((c) => c.toUpperCase())));
+  return `[${unique.map((c) => `'${c}'`).join(',')}]`;
+}
+
+export function resolveMetaCountry(region: string): string {
+  return resolveMetaCountries(region)[0] || 'US';
 }

@@ -1,7 +1,8 @@
 'use client';
 
-import { ExternalLink, Tag, MapPin, Star, MessageSquare, Globe } from 'lucide-react';
+import { ExternalLink, Tag, MapPin, Star, MessageSquare, Globe, Clock } from 'lucide-react';
 import { resolveSourceLink, isSimulatedAd } from '@/lib/adCreative';
+import { formatDetectedLabel } from '@/lib/adDateFilters';
 import AdCreativePreview from './AdCreativePreview';
 
 export default function AdCard({
@@ -107,7 +108,13 @@ export default function AdCard({
           />
 
           <p className="text-xs leading-relaxed text-slate-600 line-clamp-3 mb-3 font-normal">
-            {ad.adText || 'No ad description available for this placement.'}
+            {ad.adTitle && (
+              <span className="block font-bold text-slate-800 mb-1 line-clamp-2">{ad.adTitle}</span>
+            )}
+            {ad.adDescription && (
+              <span className="block text-slate-500 mb-1 line-clamp-2">{ad.adDescription}</span>
+            )}
+            {ad.adText || (!ad.adTitle && !ad.adDescription && 'No ad description available for this placement.')}
           </p>
 
           {ad.advertiserLink && (
@@ -140,6 +147,10 @@ export default function AdCard({
         <div className="flex items-center gap-1.5 truncate justify-end">
           <MapPin size={12} className="text-cyan-500 shrink-0" />
           <span className="truncate">{ad.region}</span>
+        </div>
+        <div className="col-span-2 flex items-center gap-1.5 text-slate-400">
+          <Clock size={11} className="shrink-0" />
+          <span>{formatDetectedLabel(ad.firstDetectedAt)}</span>
         </div>
       </div>
     </div>

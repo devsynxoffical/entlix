@@ -1,6 +1,10 @@
 import prisma from './db';
 import { isRealMetaAdId } from './adCreative';
-import { resolveMetaCountry } from './regions';
+import {
+  hasMinimumMetaAdContent,
+  parseMetaAdFields,
+} from './metaAdFields';
+import { formatMetaCountriesParam, resolveMetaCountries } from './regions';
 
 /** Stable fingerprint to catch near-duplicate creatives (same page + same copy). */
 export function adContentFingerprint(advertiserName?: string | null, adText?: string | null): string {
@@ -54,38 +58,15 @@ export async function purgeDuplicateAds(groupId?: string): Promise<number> {
   return toDelete.length;
 }
 
-function generateAdvertiserName(keyword: string): string {
-  const k = keyword.trim();
-  const cap = k.charAt(0).toUpperCase() + k.slice(1);
-  const prefixes = ['Apex', 'Scale', 'NextGen', 'Premier', 'Elite', 'Omni', 'Vanguard'];
-  const suffixes = ['Global', 'Group', 'Media', 'Solutions', 'Co', 'Labs', 'Direct'];
-  
-  const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
-  const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
-  return `${prefix} ${cap} ${suffix}`;
-}
-
-function generateAdText(keyword: string, region: string): string {
-  const templates = [
-    `Transforming how ${region} businesses handle ${keyword}. Unlock exclusive access to our proven framework today! WhatsApp us at +44 7700 900077 to get started.`,
-    `Looking for top-rated ${keyword} solutions in ${region}? See why over 5,000+ customers switched to our platform this quarter. Chat with our sales team on WhatsApp: +1 (555) 019-2834.`,
-    `Special limited-time offer for ${region}: Get 30% off your first 3 months of premium ${keyword} management. Click https://wa.me/447700900077 to claim now.`,
-    `Stop wasting budget on inefficient ${keyword}. Our AI-driven technology delivers 3x ROI guaranteed. Reach us on WhatsApp.`
-  ];
-  return templates[Math.floor(Math.random() * templates.length)];
-}
-
 // Extractor for WhatsApp links & phone numbers from ad copy & captions
-function extractWhatsAppContact(text: string, captions: string[] = []): string | null {
-  const combined = [text, ...captions].join(' ');
-  
-  // Check wa.me or api.whatsapp.com links
+function extractWhatsAppContact(text: string, extra: string[] = []): string | null {
+  const combined = [text, ...extra].join(' ');
+
   const waLinkMatch = combined.match(/(?:https?:\/\/)?(?:wa\.me|api\.whatsapp\.com\/send\?phone=)(\d+)/i);
   if (waLinkMatch && waLinkMatch[1]) {
     return waLinkMatch[1];
   }
 
-  // Check international phone numbers (e.g. +44 7700 900077 or +1 (555) 019-2834)
   const phoneMatch = combined.match(/(?:\+|00)\d{1,3}[\s.-]?\(?\d{2,4}\)?[\s.-]?\d{3,4}[\s.-]?\d{3,4}/);
   if (phoneMatch) {
     const rawNumber = phoneMatch[0].replace(/[^0-9]/g, '');
@@ -115,16 +96,23 @@ export async function fetchMetaAdLibraryAPI(
       'ad_snapshot_url',
       'publisher_platforms',
     ].join(',');
-    const countryParam = resolveMetaCountry(region);
+
+    const countries = resolveMetaCountries(region);
+    const countryParam = formatMetaCountriesParam(countries);
+
     const url =
       `https://graph.facebook.com/v19.0/ads_archive` +
       `?access_token=${encodeURIComponent(accessToken)}` +
       `&search_terms=${encodeURIComponent(searchTerms)}` +
       `&ad_type=ALL` +
-      `&ad_reached_countries=['${countryParam}']` +
+      `&ad_reached_countries=${encodeURIComponent(countryParam)}` +
       `&ad_active_status=ACTIVE` +
       `&fields=${fields}` +
       `&limit=25`;
+
+    console.log(
+      `🔍 Meta search: keyword="${searchTerms}" region="${region}" countries=${countryParam}`
+    );
 
     const response = await fetch(url);
     const data = await response.json();
@@ -151,7 +139,6 @@ async function fetchMetaAdsWithBestToken(
   const envToken = (process.env.META_ACCESS_TOKEN || '').trim() || null;
   const dbToken = (userToken || '').trim() || null;
 
-  // Env wins first so Railway production token is not overridden by an old Settings value
   const candidates = Array.from(new Set([envToken, dbToken].filter(Boolean))) as string[];
 
   if (candidates.length === 0) {
@@ -166,11 +153,10 @@ async function fetchMetaAdsWithBestToken(
     const result = await fetchMetaAdLibraryAPI(searchTerms, region, token);
 
     if (result.data) {
-      console.log(`✅ Meta API OK via ${source} — ${result.data.length} ad(s)`);
+      console.log(`✅ Meta API OK via ${source} — ${result.data.length} ad(s) for "${searchTerms}"`);
       return result.data;
     }
 
-    // Expired/invalid — try next token if available
     if (result.errorCode === 190 && i < candidates.length - 1) {
       console.warn(`⚠️ Token from ${source} expired/invalid (190). Trying fallback token…`);
       continue;
@@ -182,7 +168,6 @@ async function fetchMetaAdsWithBestToken(
   return null;
 }
 
-// Fetch official Facebook Page profile picture logo
 export async function fetchMetaPageLogo(pageId: string, accessToken: string): Promise<string | null> {
   if (!pageId || !accessToken) return null;
   try {
@@ -196,12 +181,10 @@ export async function fetchMetaPageLogo(pageId: string, accessToken: string): Pr
 }
 
 export async function runInitialBaseline(groupId: string) {
-  // No demo/mock ads — wait for live Meta Ads Library results on scan.
   const group = await prisma.monitoringGroup.findUnique({ where: { id: groupId } });
   if (!group) return;
 }
 
-/** Delete simulated/demo ads (fake metaAdId prefixes or non-numeric archive ids). */
 export async function purgeDemoAds(groupId?: string): Promise<number> {
   const ads = await prisma.advertisement.findMany({
     where: groupId ? { groupId } : undefined,
@@ -222,7 +205,6 @@ export async function detectNewAds(groupId: string): Promise<any[]> {
   });
   if (!group) return [];
 
-  // Clean existing duplicates + remove any leftover demo ads
   await purgeDuplicateAds(group.id);
   await purgeDemoAds(group.id);
 
@@ -232,21 +214,16 @@ export async function detectNewAds(groupId: string): Promise<any[]> {
     : await prisma.user.findFirst();
 
   const keywords = group.keywords.split(';').map((k) => k.trim()).filter(Boolean);
-  const matchedKeyword = keywords[Math.floor(Math.random() * keywords.length)] || group.name;
-
-  // Prefer Railway META_ACCESS_TOKEN; fall back to Settings token if needed
-  const liveAdsFromMeta = await fetchMetaAdsWithBestToken(
-    matchedKeyword,
-    group.region,
-    user?.metaAccessToken
-  );
+  if (keywords.length === 0) {
+    console.warn(`⚠️ Group "${group.name}" has no keywords — skipping scan.`);
+    return [];
+  }
 
   const accessToken =
     (process.env.META_ACCESS_TOKEN || '').trim() ||
     (user?.metaAccessToken || '').trim() ||
     null;
 
-  // Load existing meta ids + content fingerprints for this group (dedupe gate)
   const existingAds = await prisma.advertisement.findMany({
     where: { groupId: group.id },
     select: { metaAdId: true, advertiserName: true, adText: true },
@@ -260,7 +237,7 @@ export async function detectNewAds(groupId: string): Promise<any[]> {
   const batchFingerprints = new Set<string>();
   const batchMetaIds = new Set<string>();
 
-  const tryCreate = async (newAdData: any) => {
+  const tryCreate = async (newAdData: any, keywordUsed: string) => {
     const metaAdId = String(newAdData.metaAdId || '').trim();
     if (!metaAdId) return;
 
@@ -271,9 +248,18 @@ export async function detectNewAds(groupId: string): Promise<any[]> {
 
     try {
       const createdAd = await prisma.advertisement.create({
-        data: { ...newAdData, groupId: group.id, metaAdId },
+        data: {
+          ...newAdData,
+          groupId: group.id,
+          metaAdId,
+          matchingKeyword: keywordUsed,
+          region: group.region,
+        },
       });
-      createdAds.push(createdAd);
+      createdAds.push({
+        ...createdAd,
+        groupName: group.name,
+      });
       existingMetaIds.add(metaAdId);
       batchMetaIds.add(metaAdId);
       if (fp) {
@@ -281,57 +267,74 @@ export async function detectNewAds(groupId: string): Promise<any[]> {
         batchFingerprints.add(fp);
       }
     } catch (error: any) {
-      // Unique constraint race — treat as duplicate, skip
       if (error?.code === 'P2002') return;
       throw error;
     }
   };
 
-  if (liveAdsFromMeta && liveAdsFromMeta.length > 0) {
+  let totalFetched = 0;
+
+  for (const keyword of keywords) {
+    const liveAdsFromMeta = await fetchMetaAdsWithBestToken(
+      keyword,
+      group.region,
+      user?.metaAccessToken
+    );
+
+    if (!liveAdsFromMeta || liveAdsFromMeta.length === 0) {
+      console.log(
+        `ℹ️ No Meta ads for group "${group.name}" keyword="${keyword}" region="${group.region}".`
+      );
+      continue;
+    }
+
+    totalFetched += liveAdsFromMeta.length;
+
     for (const metaItem of liveAdsFromMeta) {
-      // Skip items without a real Meta archive id (random ids cause duplicates)
       if (!metaItem.id) continue;
 
-      const adText =
-        metaItem.ad_creative_bodies?.[0] ||
-        metaItem.ad_creative_link_captions?.[0] ||
-        null;
-      if (!adText && !metaItem.page_name) continue;
+      const parsed = parseMetaAdFields(metaItem);
+      const pageName = metaItem.page_name ? String(metaItem.page_name).trim() : null;
 
-      const whatsapp = extractWhatsAppContact(adText || '', metaItem.ad_creative_link_captions || []);
+      if (!hasMinimumMetaAdContent(parsed, pageName)) continue;
+
+      const whatsapp = extractWhatsAppContact(
+        [parsed.adText, parsed.adTitle, parsed.adDescription].filter(Boolean).join(' '),
+        parsed.advertiserLink ? [parsed.advertiserLink] : []
+      );
 
       let pageLogo = null;
       if (metaItem.page_id && accessToken) {
         pageLogo = await fetchMetaPageLogo(metaItem.page_id, accessToken);
       }
 
-      const linkCaption =
-        metaItem.ad_creative_link_captions?.[0] ||
-        metaItem.ad_creative_link_titles?.[0] ||
-        null;
-
-      await tryCreate({
-        metaAdId: String(metaItem.id),
-        advertiserName: metaItem.page_name || generateAdvertiserName(matchedKeyword),
-        advertiserLogo: pageLogo,
-        advertiserLink: linkCaption,
-        adText: adText || generateAdText(matchedKeyword, group.region),
-        adCreativeUrl: null,
-        matchingKeyword: matchedKeyword,
-        region: group.region,
-        whatsappContact: whatsapp,
-        startDate: metaItem.ad_creation_time ? new Date(metaItem.ad_creation_time) : new Date(),
-        classification: 'NEW',
-        sourceLink: `https://www.facebook.com/ads/library/?id=${metaItem.id}`,
-      });
+      await tryCreate(
+        {
+          metaAdId: String(metaItem.id),
+          advertiserName: pageName || 'Unknown advertiser',
+          advertiserLogo: pageLogo,
+          advertiserLink: parsed.advertiserLink,
+          adText: parsed.adText,
+          adTitle: parsed.adTitle,
+          adDescription: parsed.adDescription,
+          adCreativeUrl: null,
+          whatsappContact: whatsapp,
+          startDate: metaItem.ad_creation_time ? new Date(metaItem.ad_creation_time) : new Date(),
+          classification: 'NEW',
+          sourceLink: `https://www.facebook.com/ads/library/?id=${metaItem.id}`,
+        },
+        keyword
+      );
     }
+  }
+
+  if (createdAds.length === 0 && totalFetched === 0) {
+    console.log(`ℹ️ No live Meta results for group "${group.name}" across ${keywords.length} keyword(s).`);
   } else {
-    // No live Meta results — do not create demo/simulated ads
     console.log(
-      `ℹ️ No live Meta ads for group ${group.name} (keyword: ${matchedKeyword}). Skipping demo fallback.`
+      `📊 Group "${group.name}": ${createdAds.length} new ad(s) from ${keywords.length} keyword(s), region="${group.region}".`
     );
   }
 
-  // Email is sent by the caller (cron / scan-all) as ONE bulk summary — not per ad here.
   return createdAds;
 }

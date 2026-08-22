@@ -1,5 +1,5 @@
 import prisma from './db';
-import { getCreativeForKeyword, isRealMetaAdId } from './adCreative';
+import { isRealMetaAdId } from './adCreative';
 import { resolveMetaCountry } from './regions';
 
 /** Stable fingerprint to catch near-duplicate creatives (same page + same copy). */
@@ -316,7 +316,7 @@ export async function detectNewAds(groupId: string): Promise<any[]> {
         advertiserLogo: pageLogo,
         advertiserLink: linkCaption,
         adText: adText || generateAdText(matchedKeyword, group.region),
-        adCreativeUrl: getCreativeForKeyword(matchedKeyword),
+        adCreativeUrl: null,
         matchingKeyword: matchedKeyword,
         region: group.region,
         whatsappContact: whatsapp,

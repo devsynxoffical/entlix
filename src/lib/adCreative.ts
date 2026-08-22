@@ -1,4 +1,4 @@
-/** Keyword-matched placeholder creatives (Meta Ads Library API does not return image files). */
+/** Keyword-matched placeholder creatives when Meta preview is unavailable. */
 const CATEGORY_IMAGES: Record<string, string[]> = {
   saas: [
     'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80',
@@ -40,6 +40,11 @@ export function getCreativeForKeyword(keyword: string): string {
 }
 
 /** Meta ad_snapshot_url points to an HTML preview page — never a usable <img> src. */
+export function isPlaceholderCreativeUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  return url.includes('images.unsplash.com') || url.includes('unsplash.com/photo');
+}
+
 export function isNonImageCreativeUrl(url: string | null | undefined): boolean {
   if (!url) return true;
   const u = url.toLowerCase();
@@ -63,13 +68,62 @@ export function isDisplayableImageUrl(url: string | null | undefined): boolean {
   );
 }
 
-/** Resolve a creative URL safe for <img>, falling back to keyword placeholders. */
+export function isLikelyAdCreativeMediaUrl(url: string): boolean {
+  const u = url.toLowerCase();
+  if (!u.startsWith('http')) return false;
+  if (u.includes('rsrc.php') || u.includes('hsts-pixel') || u.includes('/security/')) return false;
+  if (u.includes('static.xx.fbcdn.net/rsrc.php')) return false;
+  return u.includes('scontent') || u.includes('video.xx.fbcdn') || /\.(jpg|jpeg|png|webp)(\?|$)/i.test(u);
+}
+
+/** Pick the largest likely creative image from a proxied Meta snapshot iframe document. */
+export function pickCreativeImageFromDocument(doc: Document): string | null {
+  const candidates: { url: string; area: number }[] = [];
+
+  for (const img of Array.from(doc.querySelectorAll('img[src]'))) {
+    const el = img as HTMLImageElement;
+    const src = el.currentSrc || el.src;
+    if (!isLikelyAdCreativeMediaUrl(src)) continue;
+    const w = el.naturalWidth || el.width || 0;
+    const h = el.naturalHeight || el.height || 0;
+    candidates.push({ url: src, area: w * h });
+  }
+
+  for (const video of Array.from(doc.querySelectorAll('video[poster]'))) {
+    const poster = (video as HTMLVideoElement).poster;
+    if (poster && isLikelyAdCreativeMediaUrl(poster)) {
+      candidates.push({ url: poster, area: 400 * 400 });
+    }
+  }
+
+  for (const node of Array.from(doc.querySelectorAll('[style*="background-image"]'))) {
+    const style = (node as HTMLElement).style.backgroundImage;
+    const match = style.match(/url\(["']?(https:\/\/[^"')]+)["']?\)/i);
+    if (match?.[1] && isLikelyAdCreativeMediaUrl(match[1])) {
+      candidates.push({ url: match[1], area: 300 * 300 });
+    }
+  }
+
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => b.area - a.area);
+  return candidates[0].url;
+}
+
+export function metaPreviewPath(metaAdId: string | null | undefined): string | null {
+  if (!isRealMetaAdId(metaAdId)) return null;
+  return `/api/ads/preview/${metaAdId}`;
+}
+
+/** Resolve a displayable creative URL, or null if none. */
 export function resolveAdCreativeUrl(
   adCreativeUrl: string | null | undefined,
-  matchingKeyword?: string | null
-): string {
-  if (isDisplayableImageUrl(adCreativeUrl) && adCreativeUrl) return adCreativeUrl;
-  return getCreativeForKeyword(matchingKeyword || 'default');
+  _matchingKeyword?: string | null,
+  _metaAdId?: string | null
+): string | null {
+  if (isDisplayableImageUrl(adCreativeUrl) && adCreativeUrl && !isPlaceholderCreativeUrl(adCreativeUrl)) {
+    return adCreativeUrl;
+  }
+  return null;
 }
 
 /** Real Meta Ads Library archive IDs are long numeric strings. */

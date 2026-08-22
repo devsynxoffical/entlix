@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { ExternalLink, Tag, MapPin, Star, MessageSquare, Eye, Globe, ImageOff } from 'lucide-react';
-import { resolveAdCreativeUrl, resolveSourceLink, isSimulatedAd } from '@/lib/adCreative';
+import { ExternalLink, Tag, MapPin, Star, MessageSquare, Globe } from 'lucide-react';
+import { resolveSourceLink, isSimulatedAd } from '@/lib/adCreative';
+import AdCreativePreview from './AdCreativePreview';
 
 export default function AdCard({
   ad,
@@ -20,15 +20,6 @@ export default function AdCard({
   const whatsappCleanNumber = ad.whatsappContact ? ad.whatsappContact.replace(/[^0-9]/g, '') : null;
   const whatsappUrl = whatsappCleanNumber ? `https://wa.me/${whatsappCleanNumber}` : null;
   const liveAdUrl = resolveSourceLink(ad.sourceLink, ad.metaAdId);
-  const [imgSrc, setImgSrc] = useState(() =>
-    resolveAdCreativeUrl(ad.adCreativeUrl, ad.matchingKeyword)
-  );
-  const [imgFailed, setImgFailed] = useState(false);
-
-  useEffect(() => {
-    setImgSrc(resolveAdCreativeUrl(ad.adCreativeUrl, ad.matchingKeyword));
-    setImgFailed(false);
-  }, [ad.id, ad.adCreativeUrl, ad.matchingKeyword]);
 
   return (
     <div
@@ -108,35 +99,12 @@ export default function AdCard({
 
         {/* Creative Image Preview */}
         <div className="p-4 pb-2">
-          <div className="w-full aspect-[4/3] bg-slate-100 rounded-xl mb-3 flex items-center justify-center overflow-hidden border border-slate-200/60 relative">
-            {!imgFailed ? (
-              <img
-                src={imgSrc}
-                alt="Ad creative"
-                className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
-                loading="lazy"
-                referrerPolicy="no-referrer"
-                onError={() => {
-                  const fallback = resolveAdCreativeUrl(null, ad.matchingKeyword);
-                  if (imgSrc !== fallback) {
-                    setImgSrc(fallback);
-                  } else {
-                    setImgFailed(true);
-                  }
-                }}
-              />
-            ) : (
-              <div className="flex flex-col items-center gap-2 text-slate-400 px-4 text-center">
-                <ImageOff size={28} />
-                <span className="text-xs font-medium">Creative preview unavailable</span>
-              </div>
-            )}
-            <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/30 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
-              <span className="bg-white text-slate-900 text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-2 shadow-lg">
-                <Eye size={14} className="text-purple-600" /> Inspect Full Ad
-              </span>
-            </div>
-          </div>
+          <AdCreativePreview
+            adId={ad.id}
+            metaAdId={ad.metaAdId}
+            adCreativeUrl={ad.adCreativeUrl}
+            variant="card"
+          />
 
           <p className="text-xs leading-relaxed text-slate-600 line-clamp-3 mb-3 font-normal">
             {ad.adText || 'No ad description available for this placement.'}

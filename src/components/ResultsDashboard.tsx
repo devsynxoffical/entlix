@@ -3,11 +3,12 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import AdCard from './AdCard';
-import { resolveAdCreativeUrl, resolveSourceLink, isSimulatedAd } from '@/lib/adCreative';
+import AdCreativePreview from './AdCreativePreview';
+import { resolveSourceLink, isSimulatedAd } from '@/lib/adCreative';
 import { 
   Search, Filter, Loader2, RefreshCw, AlertCircle, Download, 
   X, ExternalLink, Copy, Check, MessageSquare, Tag, MapPin, 
-  Clock, Sparkles, Building2, ImageOff
+  Clock, Sparkles, Building2
 } from 'lucide-react';
 
 export default function ResultsDashboard() {
@@ -32,23 +33,10 @@ export default function ResultsDashboard() {
   const [dossierData, setDossierData] = useState<any>(null);
   const [loadingDossier, setLoadingDossier] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [modalImgSrc, setModalImgSrc] = useState<string | null>(null);
-  const [modalImgFailed, setModalImgFailed] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  // Sync modal creative when selected ad changes
-  useEffect(() => {
-    if (selectedAd) {
-      setModalImgSrc(resolveAdCreativeUrl(selectedAd.adCreativeUrl, selectedAd.matchingKeyword));
-      setModalImgFailed(false);
-    } else {
-      setModalImgSrc(null);
-      setModalImgFailed(false);
-    }
-  }, [selectedAd]);
 
   // Prevent background scroll when any modal is active
   useEffect(() => {
@@ -415,29 +403,12 @@ export default function ResultsDashboard() {
                     {selectedAd.adText || 'No ad description available for this placement.'}
                   </div>
 
-                  <div className="w-full aspect-[4/3] max-h-80 bg-slate-100 flex items-center justify-center overflow-hidden border-y border-slate-200/80">
-                    {modalImgSrc && !modalImgFailed ? (
-                      <img
-                        src={modalImgSrc}
-                        alt="Ad creative"
-                        className="w-full h-full object-cover"
-                        referrerPolicy="no-referrer"
-                        onError={() => {
-                          const fallback = resolveAdCreativeUrl(null, selectedAd.matchingKeyword);
-                          if (modalImgSrc !== fallback) {
-                            setModalImgSrc(fallback);
-                          } else {
-                            setModalImgFailed(true);
-                          }
-                        }}
-                      />
-                    ) : (
-                      <div className="flex flex-col items-center gap-2 text-slate-400 py-12">
-                        <ImageOff size={32} />
-                        <span className="text-xs font-medium">Creative preview unavailable</span>
-                      </div>
-                    )}
-                  </div>
+                  <AdCreativePreview
+                    adId={selectedAd.id}
+                    metaAdId={selectedAd.metaAdId}
+                    adCreativeUrl={selectedAd.adCreativeUrl}
+                    variant="modal"
+                  />
 
                   <div className="p-3 bg-slate-50 flex items-center justify-between border-t border-slate-100 gap-2">
                     <div className="flex flex-col min-w-0">

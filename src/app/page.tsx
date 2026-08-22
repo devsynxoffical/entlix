@@ -57,10 +57,7 @@ export default function LandingPage() {
 
             <div className="flex flex-col sm:flex-row justify-center items-center gap-4 mb-10">
               <Link href="/auth/signin" className="btn btn-primary text-base py-3.5 px-8 w-full sm:w-auto shadow-xl shadow-purple-500/30 rounded-xl font-bold flex items-center justify-center gap-2">
-                Open Dashboard <ArrowRight size={18} />
-              </Link>
-              <Link href="/auth/signin" className="btn btn-secondary text-base py-3.5 px-8 w-full sm:w-auto rounded-xl font-semibold">
-                Sign In to Dashboard
+                Sign In to Dashboard <ArrowRight size={18} />
               </Link>
             </div>
 

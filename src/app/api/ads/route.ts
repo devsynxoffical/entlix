@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/db';
 import {
   isNonImageCreativeUrl,
+  isPlaceholderCreativeUrl,
   isPrivateMetaSnapshotUrl,
   isRealMetaAdId,
-  resolveAdCreativeUrl,
+  isDisplayableImageUrl,
   resolveSourceLink,
 } from '@/lib/adCreative';
 import { purgeDuplicateAds, purgeDemoAds } from '@/lib/monitoring';
@@ -32,7 +33,9 @@ export async function GET(req: Request) {
 
     const repaired = await Promise.all(
       liveOnly.map(async (ad) => {
-        const needsCreativeFix = isNonImageCreativeUrl(ad.adCreativeUrl);
+        const needsCreativeFix =
+          isPlaceholderCreativeUrl(ad.adCreativeUrl) ||
+          (isNonImageCreativeUrl(ad.adCreativeUrl) && !isDisplayableImageUrl(ad.adCreativeUrl));
         const safeSource = resolveSourceLink(ad.sourceLink, ad.metaAdId);
         const needsSourceFix =
           !!safeSource &&
@@ -42,9 +45,9 @@ export async function GET(req: Request) {
           return { ...ad, sourceLink: safeSource || ad.sourceLink };
         }
 
-        const data: { adCreativeUrl?: string; sourceLink?: string } = {};
+        const data: { adCreativeUrl?: string | null; sourceLink?: string } = {};
         if (needsCreativeFix) {
-          data.adCreativeUrl = resolveAdCreativeUrl(null, ad.matchingKeyword);
+          data.adCreativeUrl = null;
         }
         if (needsSourceFix && safeSource) {
           data.sourceLink = safeSource;
@@ -67,7 +70,6 @@ export async function GET(req: Request) {
 
     const safeAds = repaired.map((ad) => ({
       ...ad,
-      adCreativeUrl: resolveAdCreativeUrl(ad.adCreativeUrl, ad.matchingKeyword),
       sourceLink: resolveSourceLink(ad.sourceLink, ad.metaAdId),
     }));
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Save, Key, Bell, Globe, CheckCircle2, MessageSquare, Hash, Mail } from 'lucide-react';
+import { Save, Key, Bell, Globe, CheckCircle2, MessageSquare, Hash, Mail, Send } from 'lucide-react';
 import { REGION_OPTIONS } from '@/lib/regions';
 
 export default function SettingsPage() {
@@ -11,6 +11,9 @@ export default function SettingsPage() {
   const [metaAccessToken, setMetaAccessToken] = useState('');
   const [slackWebhookUrl, setSlackWebhookUrl] = useState('');
   const [discordWebhookUrl, setDiscordWebhookUrl] = useState('');
+  const [telegramSession, setTelegramSession] = useState('');
+  const [telegramConnected, setTelegramConnected] = useState(false);
+  const [telegramSessionHint, setTelegramSessionHint] = useState('');
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -27,6 +30,8 @@ export default function SettingsPage() {
           if (data.metaAccessToken) setMetaAccessToken(data.metaAccessToken);
           if (data.slackWebhookUrl) setSlackWebhookUrl(data.slackWebhookUrl);
           if (data.discordWebhookUrl) setDiscordWebhookUrl(data.discordWebhookUrl);
+          if (data.telegramConnected !== undefined) setTelegramConnected(!!data.telegramConnected);
+          if (data.telegramSessionHint) setTelegramSessionHint(data.telegramSessionHint);
         }
       })
       .finally(() => setLoading(false));
@@ -38,19 +43,29 @@ export default function SettingsPage() {
     setSavedSuccess(false);
 
     try {
+      const payload: Record<string, unknown> = {
+        defaultRegion,
+        emailAlerts,
+        metaAccessToken,
+        slackWebhookUrl,
+        discordWebhookUrl,
+      };
+      // Only send session when user typed a new value (avoid wiping with empty on every save)
+      if (telegramSession.trim()) {
+        payload.telegramSession = telegramSession.trim();
+      }
+
       const res = await fetch('/api/user/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          defaultRegion,
-          emailAlerts,
-          metaAccessToken,
-          slackWebhookUrl,
-          discordWebhookUrl
-        })
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {
+        const data = await res.json();
+        setTelegramSession('');
+        if (data.telegramConnected !== undefined) setTelegramConnected(!!data.telegramConnected);
+        if (data.telegramSessionHint) setTelegramSessionHint(data.telegramSessionHint);
         setSavedSuccess(true);
         setTimeout(() => setSavedSuccess(false), 3000);
       }
@@ -171,6 +186,58 @@ export default function SettingsPage() {
                 className="input-field text-xs font-mono"
               />
             </div>
+          </div>
+        </div>
+
+        <div className="glass-card p-6 border border-slate-200/80 rounded-2xl flex flex-col gap-4">
+          <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+            <Send className="text-[#229ED9]" size={20} />
+            <h2 className="text-base font-bold text-slate-900">Telegram MTProto Session</h2>
+          </div>
+
+          <div className="p-3 rounded-xl border border-slate-200 bg-slate-50 text-xs text-slate-600 leading-relaxed">
+            Status:{' '}
+            <strong className={telegramConnected ? 'text-emerald-700' : 'text-amber-700'}>
+              {telegramConnected ? 'Connected' : 'Not connected'}
+            </strong>
+            {telegramSessionHint ? (
+              <span className="text-slate-400 font-mono ml-2">{telegramSessionHint}</span>
+            ) : null}
+            <ol className="list-decimal ml-4 mt-2 space-y-1">
+              <li>
+                Create an app at{' '}
+                <a
+                  href="https://my.telegram.org"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#229ED9] font-semibold"
+                >
+                  my.telegram.org
+                </a>{' '}
+                → set <code className="bg-white px-1 rounded">TELEGRAM_API_ID</code> /{' '}
+                <code className="bg-white px-1 rounded">TELEGRAM_API_HASH</code> on the server
+              </li>
+              <li>
+                Run locally: <code className="bg-white px-1 rounded">node scripts/telegram-login.mjs</code>
+              </li>
+              <li>Paste the StringSession below (or set Railway <code className="bg-white px-1 rounded">TELEGRAM_SESSION</code>)</li>
+            </ol>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+              Paste new StringSession (leave blank to keep current)
+            </label>
+            <textarea
+              rows={3}
+              placeholder="1BVtsOHwBu..."
+              value={telegramSession}
+              onChange={(e) => setTelegramSession(e.target.value)}
+              className="input-field text-xs font-mono"
+            />
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Treat this like a password. Only public groups/channels can be discovered by keyword search.
+            </p>
           </div>
         </div>
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, Settings, LogOut, Plus, ShieldCheck, Sparkles } from "lucide-react";
+import { LayoutDashboard, Users, Settings, LogOut, Plus, ShieldCheck, Sparkles, Send } from "lucide-react";
 import { signOut } from "next-auth/react";
 
 export default function Sidebar() {
@@ -50,6 +50,14 @@ export default function Sidebar() {
           >
             <Users size={19} />
             <span>Monitoring Groups</span>
+          </Link>
+
+          <Link 
+            href="/dashboard/telegram" 
+            className={`nav-item ${pathname?.includes("/dashboard/telegram") ? "active" : ""}`}
+          >
+            <Send size={19} />
+            <span>Telegram</span>
           </Link>
 
           <Link 

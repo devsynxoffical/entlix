@@ -86,9 +86,42 @@ model User {
   metaAccessToken String?
   slackWebhookUrl  String?
   discordWebhookUrl String?
+  telegramSession String?           // GramJS StringSession for MTProto search
   accounts        Account[]
   sessions        Session[]
   monitoringGroups MonitoringGroup[]
+  telegramKeywords TelegramKeyword[]
+}
+
+model TelegramKeyword {
+  id        String          @id @default(uuid())
+  userId    String?
+  user      User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  keyword   String
+  status    String          @default("ACTIVE") // ACTIVE, PAUSED
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  groups    TelegramGroup[]
+}
+
+model TelegramGroup {
+  id                 String          @id @default(uuid())
+  keywordId          String
+  keyword            TelegramKeyword @relation(fields: [keywordId], references: [id], onDelete: Cascade)
+  telegramId         String          // Telegram chat/channel id as string
+  title              String
+  username           String?
+  inviteLink         String?         // https://t.me/...
+  about              String?
+  participantsCount  Int?
+  isChannel          Boolean         @default(false)
+  matchingKeyword    String
+  classification     String          // NEW, EXISTING
+  firstDetectedAt    DateTime        @default(now())
+  lastDetectedAt     DateTime        @default(now())
+  isFavorite         Boolean         @default(false)
+
+  @@unique([keywordId, telegramId])
 }
 
 model VerificationToken {

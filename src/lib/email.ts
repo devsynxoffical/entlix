@@ -223,6 +223,123 @@ export async function sendBulkScanAlert(opts: {
   return { ...alertPayload, ...result, count };
 }
 
+/** One summary email for newly discovered Telegram public groups/channels. */
+export async function sendBulkTelegramAlert(opts: {
+  keywordsScanned: number;
+  groups: any[];
+  user?: any;
+}) {
+  const { keywordsScanned, groups, user } = opts;
+  if (!groups.length) {
+    return { sent: false, skipped: true, reason: 'no new telegram groups' };
+  }
+
+  if (user?.emailAlerts === false) {
+    return { sent: false, skipped: true, reason: 'emailAlerts disabled' };
+  }
+
+  const recipients = getAlertRecipients();
+  if (recipients.length === 0) {
+    console.warn('⚠️ No alert recipients configured.');
+    return { sent: false, recipients: [] };
+  }
+
+  const count = groups.length;
+  const rows = groups
+    .slice(0, 40)
+    .map((g, i) => {
+      const link =
+        g.inviteLink ||
+        (g.username ? `https://t.me/${g.username}` : null);
+      const title = escapeHtml(String(g.title || 'Untitled').slice(0, 120));
+      const about = escapeHtml(String(g.about || '—').slice(0, 160));
+      const keyword = escapeHtml(String(g.matchingKeyword || g.keywordLabel || '—'));
+      const members =
+        g.participantsCount != null ? String(g.participantsCount) : '—';
+      const kind = g.isChannel ? 'Channel/supergroup' : 'Group';
+
+      return `
+        <tr>
+          <td style="padding:10px 8px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#64748b;vertical-align:top;">${i + 1}</td>
+          <td style="padding:10px 8px;border-bottom:1px solid #e2e8f0;font-size:12px;vertical-align:top;">
+            <strong style="color:#0f172a;">${title}</strong><br/>
+            <span style="color:#7c3aed;font-size:12px;font-weight:700;">Keyword: ${keyword}</span>
+            <span style="color:#94a3b8;font-size:12px;"> · ${kind}</span>
+          </td>
+          <td style="padding:10px 8px;border-bottom:1px solid #e2e8f0;font-size:12px;color:#475569;vertical-align:top;">
+            ${g.username ? `@${escapeHtml(g.username)}` : '—'}<br/>
+            <span style="color:#94a3b8;">Members: ${members}</span>
+          </td>
+          <td style="padding:10px 8px;border-bottom:1px solid #e2e8f0;font-size:12px;color:#475569;vertical-align:top;">${about}${String(g.about || '').length > 160 ? '…' : ''}</td>
+          <td style="padding:10px 8px;border-bottom:1px solid #e2e8f0;font-size:12px;vertical-align:top;white-space:nowrap;">
+            ${link ? `<a href="${escapeHtml(link)}" style="color:#229ED9;font-weight:700;text-decoration:none;">Open</a>` : '—'}
+          </td>
+        </tr>`;
+    })
+    .join('');
+
+  const moreNote =
+    count > 40
+      ? `<p style="font-size:12px;color:#94a3b8;margin:12px 0 0;">Showing 40 of ${count} new groups. Open Entiix → Telegram for the full list.</p>`
+      : '';
+
+  const alertPayload: AlertPayload = {
+    recipients,
+    subject: `📣 Entiix: ${count} new Telegram group${count === 1 ? '' : 's'} found`,
+    html: `
+      <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;max-width:720px;margin:0 auto;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;background:#ffffff;">
+        <div style="background:linear-gradient(135deg,#229ED9 0%,#1b7eae 100%);padding:24px;text-align:center;color:white;">
+          <h1 style="margin:0;font-size:22px;font-weight:800;">Entiix Telegram</h1>
+          <p style="margin:6px 0 0;font-size:14px;opacity:0.9;">New public groups / channels matching your keywords</p>
+        </div>
+        <div style="padding:24px;color:#0f172a;">
+          <p style="margin:0 0 16px;font-size:15px;line-height:1.5;">
+            We scanned <strong>${keywordsScanned}</strong> Telegram keyword${keywordsScanned === 1 ? '' : 's'} and found
+            <strong style="color:#229ED9;">${count}</strong> new public group${count === 1 ? '' : 's'} (first-seen only).
+          </p>
+          <table style="width:100%;border-collapse:collapse;">
+            <thead>
+              <tr style="background:#f8fafc;text-align:left;">
+                <th style="padding:8px;font-size:11px;text-transform:uppercase;color:#94a3b8;border-bottom:1px solid #e2e8f0;">#</th>
+                <th style="padding:8px;font-size:11px;text-transform:uppercase;color:#94a3b8;border-bottom:1px solid #e2e8f0;">Title / Keyword</th>
+                <th style="padding:8px;font-size:11px;text-transform:uppercase;color:#94a3b8;border-bottom:1px solid #e2e8f0;">Username</th>
+                <th style="padding:8px;font-size:11px;text-transform:uppercase;color:#94a3b8;border-bottom:1px solid #e2e8f0;">About</th>
+                <th style="padding:8px;font-size:11px;text-transform:uppercase;color:#94a3b8;border-bottom:1px solid #e2e8f0;">Link</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+          ${moreNote}
+          <p style="font-size:11px;color:#94a3b8;margin:16px 0 0;">
+            Only public groups/channels returned by Telegram search. Private invite-only groups are not discoverable.
+          </p>
+        </div>
+        <div style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:14px 24px;text-align:center;font-size:12px;color:#94a3b8;">
+          Sent separately to: ${recipients.join(', ')}
+        </div>
+      </div>
+    `,
+  };
+
+  console.log('====================================');
+  console.log(`📧 TELEGRAM ALERT — ${count} new group(s)`);
+  console.log(`Recipients: ${recipients.join(', ')}`);
+  console.log(`Subject: ${alertPayload.subject}`);
+  console.log('====================================');
+
+  const result = await deliverEmail(alertPayload);
+  if (result.sent) {
+    console.log(
+      `✅ Telegram alert delivered via ${result.provider} → ${(result.sentTo || []).join(', ')}` +
+        (result.error ? ` (partial: ${result.error})` : '')
+    );
+  } else {
+    console.warn(`❌ Telegram alert NOT delivered (${result.provider}): ${result.error}`);
+  }
+
+  return { ...alertPayload, ...result, count };
+}
+
 /** @deprecated use sendBulkScanAlert — kept for any one-off callers */
 export async function sendEmailAlert(group: any, ad: any) {
   return sendBulkScanAlert({

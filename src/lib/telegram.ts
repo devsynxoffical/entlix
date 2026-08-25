@@ -16,6 +16,15 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function firstNonEmpty(...values: Array<string | null | undefined>): string {
+  for (const value of values) {
+    if (typeof value !== 'string') continue;
+    const trimmed = value.trim();
+    if (trimmed) return trimmed;
+  }
+  return '';
+}
+
 export async function resolveTelegramCredentials(): Promise<{
   apiId: number | null;
   apiHash: string | null;
@@ -30,18 +39,18 @@ export async function resolveTelegramCredentials(): Promise<{
     take: 50,
   });
 
-  const apiIdRaw =
-    users.map((u) => u.telegramApiId?.trim()).find(Boolean) ||
-    (process.env.TELEGRAM_API_ID || '').trim() ||
-    '';
-  const apiHash =
-    users.map((u) => u.telegramApiHash?.trim()).find(Boolean) ||
-    (process.env.TELEGRAM_API_HASH || '').trim() ||
-    '';
-  const session =
-    users.map((u) => u.telegramSession?.trim()).find(Boolean) ||
-    (process.env.TELEGRAM_SESSION || '').trim() ||
-    '';
+  const apiIdRaw = firstNonEmpty(
+    ...users.map((u) => u.telegramApiId),
+    process.env.TELEGRAM_API_ID
+  );
+  const apiHash = firstNonEmpty(
+    ...users.map((u) => u.telegramApiHash),
+    process.env.TELEGRAM_API_HASH
+  );
+  const session = firstNonEmpty(
+    ...users.map((u) => u.telegramSession),
+    process.env.TELEGRAM_SESSION
+  );
 
   const idNum = Number(apiIdRaw);
   return {

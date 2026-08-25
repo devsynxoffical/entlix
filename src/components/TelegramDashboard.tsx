@@ -261,8 +261,12 @@ export default function TelegramDashboard() {
             </form>
           </div>
           <p className="text-xs text-slate-500">
-            Searches <strong>public</strong> Telegram groups/channels via your user session. New = first time Entiix sees
-            that group. Configure session in Settings · ads/groups kept 7 days.
+            Searches <strong>public</strong> Telegram groups/channels. New = first time Entiix sees that group.
+            Groups are kept 7 days. Need credentials? Open{' '}
+            <a href="/dashboard/settings" className="text-[#229ED9] font-semibold underline underline-offset-2">
+              Settings → Telegram credentials
+            </a>{' '}
+            for the full step-by-step guide (api_id, api_hash, StringSession).
           </p>
         </div>
 

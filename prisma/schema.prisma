@@ -86,7 +86,9 @@ model User {
   metaAccessToken String?
   slackWebhookUrl  String?
   discordWebhookUrl String?
-  telegramSession String?           // GramJS StringSession for MTProto search
+  telegramApiId     String?           // from my.telegram.org
+  telegramApiHash   String?           // from my.telegram.org
+  telegramSession   String?           // GramJS StringSession for MTProto search
   accounts        Account[]
   sessions        Session[]
   monitoringGroups MonitoringGroup[]

@@ -16,26 +16,53 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function resolveTelegramSession(): Promise<string | null> {
-  const envSession = (process.env.TELEGRAM_SESSION || '').trim();
-  if (envSession) return envSession;
-
-  const user = await prisma.user.findFirst({
-    where: { telegramSession: { not: null } },
-    select: { telegramSession: true },
+export async function resolveTelegramCredentials(): Promise<{
+  apiId: number | null;
+  apiHash: string | null;
+  session: string | null;
+}> {
+  const users = await prisma.user.findMany({
+    select: {
+      telegramApiId: true,
+      telegramApiHash: true,
+      telegramSession: true,
+    },
+    take: 50,
   });
-  return (user?.telegramSession || '').trim() || null;
+
+  const apiIdRaw =
+    users.map((u) => u.telegramApiId?.trim()).find(Boolean) ||
+    (process.env.TELEGRAM_API_ID || '').trim() ||
+    '';
+  const apiHash =
+    users.map((u) => u.telegramApiHash?.trim()).find(Boolean) ||
+    (process.env.TELEGRAM_API_HASH || '').trim() ||
+    '';
+  const session =
+    users.map((u) => u.telegramSession?.trim()).find(Boolean) ||
+    (process.env.TELEGRAM_SESSION || '').trim() ||
+    '';
+
+  const idNum = Number(apiIdRaw);
+  return {
+    apiId: apiIdRaw && Number.isFinite(idNum) ? idNum : null,
+    apiHash: apiHash || null,
+    session: session || null,
+  };
+}
+
+/** @deprecated use resolveTelegramCredentials */
+export async function resolveTelegramSession(): Promise<string | null> {
+  const creds = await resolveTelegramCredentials();
+  return creds.session;
 }
 
 export async function getTelegramClient(): Promise<TelegramClient | null> {
-  const apiIdRaw = (process.env.TELEGRAM_API_ID || '').trim();
-  const apiHash = (process.env.TELEGRAM_API_HASH || '').trim();
-  const session = await resolveTelegramSession();
+  const { apiId, apiHash, session } = await resolveTelegramCredentials();
 
-  const apiId = Number(apiIdRaw);
-  if (!apiIdRaw || !Number.isFinite(apiId) || !apiHash || !session) {
+  if (!apiId || !apiHash || !session) {
     console.warn(
-      '⚠️ Telegram MTProto not configured. Set TELEGRAM_API_ID, TELEGRAM_API_HASH, and TELEGRAM_SESSION (or Settings session).'
+      '⚠️ Telegram MTProto not configured. Add API ID, API Hash, and Session in Settings (or env).'
     );
     return null;
   }
@@ -47,7 +74,9 @@ export async function getTelegramClient(): Promise<TelegramClient | null> {
 
   await client.connect();
   if (!(await client.isUserAuthorized())) {
-    console.warn('⚠️ Telegram session is not authorized. Re-run scripts/telegram-login.mjs');
+    console.warn(
+      '⚠️ Telegram session is not authorized. Re-run scripts/telegram-login.mjs and paste session in Settings.'
+    );
     await client.disconnect();
     return null;
   }

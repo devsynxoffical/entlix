@@ -11,9 +11,14 @@ export default function SettingsPage() {
   const [metaAccessToken, setMetaAccessToken] = useState('');
   const [slackWebhookUrl, setSlackWebhookUrl] = useState('');
   const [discordWebhookUrl, setDiscordWebhookUrl] = useState('');
+  const [telegramApiId, setTelegramApiId] = useState('');
+  const [telegramApiHash, setTelegramApiHash] = useState('');
   const [telegramSession, setTelegramSession] = useState('');
   const [telegramConnected, setTelegramConnected] = useState(false);
   const [telegramSessionHint, setTelegramSessionHint] = useState('');
+  const [telegramApiHashHint, setTelegramApiHashHint] = useState('');
+  const [telegramHasApiHash, setTelegramHasApiHash] = useState(false);
+  const [telegramHasSession, setTelegramHasSession] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -30,8 +35,12 @@ export default function SettingsPage() {
           if (data.metaAccessToken) setMetaAccessToken(data.metaAccessToken);
           if (data.slackWebhookUrl) setSlackWebhookUrl(data.slackWebhookUrl);
           if (data.discordWebhookUrl) setDiscordWebhookUrl(data.discordWebhookUrl);
+          if (data.telegramApiId) setTelegramApiId(data.telegramApiId);
           if (data.telegramConnected !== undefined) setTelegramConnected(!!data.telegramConnected);
           if (data.telegramSessionHint) setTelegramSessionHint(data.telegramSessionHint);
+          if (data.telegramApiHashHint) setTelegramApiHashHint(data.telegramApiHashHint);
+          if (data.telegramHasApiHash !== undefined) setTelegramHasApiHash(!!data.telegramHasApiHash);
+          if (data.telegramHasSession !== undefined) setTelegramHasSession(!!data.telegramHasSession);
         }
       })
       .finally(() => setLoading(false));
@@ -49,8 +58,11 @@ export default function SettingsPage() {
         metaAccessToken,
         slackWebhookUrl,
         discordWebhookUrl,
+        telegramApiId: telegramApiId.trim(),
       };
-      // Only send session when user typed a new value (avoid wiping with empty on every save)
+      if (telegramApiHash.trim()) {
+        payload.telegramApiHash = telegramApiHash.trim();
+      }
       if (telegramSession.trim()) {
         payload.telegramSession = telegramSession.trim();
       }
@@ -63,9 +75,14 @@ export default function SettingsPage() {
 
       if (res.ok) {
         const data = await res.json();
+        setTelegramApiHash('');
         setTelegramSession('');
+        if (data.telegramApiId) setTelegramApiId(data.telegramApiId);
         if (data.telegramConnected !== undefined) setTelegramConnected(!!data.telegramConnected);
         if (data.telegramSessionHint) setTelegramSessionHint(data.telegramSessionHint);
+        if (data.telegramApiHashHint) setTelegramApiHashHint(data.telegramApiHashHint);
+        if (data.telegramHasApiHash !== undefined) setTelegramHasApiHash(!!data.telegramHasApiHash);
+        if (data.telegramHasSession !== undefined) setTelegramHasSession(!!data.telegramHasSession);
         setSavedSuccess(true);
         setTimeout(() => setSavedSuccess(false), 3000);
       }
@@ -192,52 +209,169 @@ export default function SettingsPage() {
         <div className="glass-card p-6 border border-slate-200/80 rounded-2xl flex flex-col gap-4">
           <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
             <Send className="text-[#229ED9]" size={20} />
-            <h2 className="text-base font-bold text-slate-900">Telegram MTProto Session</h2>
+            <h2 className="text-base font-bold text-slate-900">Telegram credentials</h2>
           </div>
 
-          <div className="p-3 rounded-xl border border-slate-200 bg-slate-50 text-xs text-slate-600 leading-relaxed">
+          <div
+            className={`p-3 rounded-xl border text-xs font-semibold ${
+              telegramConnected
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                : 'border-amber-200 bg-amber-50 text-amber-800'
+            }`}
+          >
             Status:{' '}
-            <strong className={telegramConnected ? 'text-emerald-700' : 'text-amber-700'}>
-              {telegramConnected ? 'Connected' : 'Not connected'}
-            </strong>
-            {telegramSessionHint ? (
-              <span className="text-slate-400 font-mono ml-2">{telegramSessionHint}</span>
-            ) : null}
-            <ol className="list-decimal ml-4 mt-2 space-y-1">
-              <li>
-                Create an app at{' '}
-                <a
-                  href="https://my.telegram.org"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[#229ED9] font-semibold"
-                >
-                  my.telegram.org
-                </a>{' '}
-                → set <code className="bg-white px-1 rounded">TELEGRAM_API_ID</code> /{' '}
-                <code className="bg-white px-1 rounded">TELEGRAM_API_HASH</code> on the server
+            {telegramConnected
+              ? 'Ready — API ID, Hash, and Session are configured'
+              : 'Incomplete — follow the steps below, then fill all three fields'}
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 sm:p-5">
+            <h3 className="text-sm font-bold text-slate-900 mb-3">How to get these details (step by step)</h3>
+            <ol className="space-y-4 text-xs text-slate-600 leading-relaxed">
+              <li className="flex gap-3">
+                <span className="shrink-0 w-6 h-6 rounded-full bg-[#229ED9] text-white text-[11px] font-bold flex items-center justify-center">
+                  1
+                </span>
+                <div>
+                  <p className="font-bold text-slate-800">Open Telegram API dashboard</p>
+                  <p className="mt-0.5">
+                    Go to{' '}
+                    <a
+                      href="https://my.telegram.org"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#229ED9] font-semibold underline underline-offset-2"
+                    >
+                      https://my.telegram.org
+                    </a>{' '}
+                    and log in with your phone number (same number as your Telegram app). Enter the login code Telegram sends you.
+                  </p>
+                </div>
               </li>
-              <li>
-                Run locally: <code className="bg-white px-1 rounded">node scripts/telegram-login.mjs</code>
+              <li className="flex gap-3">
+                <span className="shrink-0 w-6 h-6 rounded-full bg-[#229ED9] text-white text-[11px] font-bold flex items-center justify-center">
+                  2
+                </span>
+                <div>
+                  <p className="font-bold text-slate-800">Create an API application</p>
+                  <p className="mt-0.5">
+                    Click <strong>API development tools</strong>. If you have no app yet, create one:
+                  </p>
+                  <ul className="list-disc ml-4 mt-1 space-y-0.5 text-slate-500">
+                    <li>
+                      <strong>App title</strong> — any name (e.g. Entiix Group Discovery)
+                    </li>
+                    <li>
+                      <strong>Short name</strong> — letters/numbers only, 5–32 chars (e.g. entiixgroups)
+                    </li>
+                    <li>Platform / description can be left as defaults</li>
+                  </ul>
+                </div>
               </li>
-              <li>Paste the StringSession below (or set Railway <code className="bg-white px-1 rounded">TELEGRAM_SESSION</code>)</li>
+              <li className="flex gap-3">
+                <span className="shrink-0 w-6 h-6 rounded-full bg-[#229ED9] text-white text-[11px] font-bold flex items-center justify-center">
+                  3
+                </span>
+                <div>
+                  <p className="font-bold text-slate-800">Copy App api_id and App api_hash</p>
+                  <p className="mt-0.5">
+                    On the <strong>App configuration</strong> page you will see:
+                  </p>
+                  <ul className="list-disc ml-4 mt-1 space-y-0.5 text-slate-500">
+                    <li>
+                      <strong>App api_id</strong> — a number (paste into the api_id field below)
+                    </li>
+                    <li>
+                      <strong>App api_hash</strong> — a long hex string (paste into api_hash below)
+                    </li>
+                  </ul>
+                  <p className="mt-1 text-slate-500">
+                    You do <strong>not</strong> need the “Test/Production DC” addresses or RSA public keys — Entiix handles those automatically.
+                  </p>
+                </div>
+              </li>
+              <li className="flex gap-3">
+                <span className="shrink-0 w-6 h-6 rounded-full bg-[#229ED9] text-white text-[11px] font-bold flex items-center justify-center">
+                  4
+                </span>
+                <div>
+                  <p className="font-bold text-slate-800">Generate StringSession (one-time login)</p>
+                  <p className="mt-0.5">
+                    api_id / api_hash alone are not enough. On your computer, in the Entiix project folder, run:
+                  </p>
+                  <pre className="mt-1.5 bg-slate-900 text-slate-100 text-[11px] font-mono px-3 py-2 rounded-lg overflow-x-auto">
+                    npm run telegram:login
+                  </pre>
+                  <p className="mt-1.5 text-slate-500">
+                    Enter your phone (with country code, e.g. <code className="bg-white px-1 rounded border">+92…</code>), then the code from Telegram, then 2FA password if you use one. The script prints a long <strong>StringSession</strong> — copy the whole line.
+                  </p>
+                </div>
+              </li>
+              <li className="flex gap-3">
+                <span className="shrink-0 w-6 h-6 rounded-full bg-[#229ED9] text-white text-[11px] font-bold flex items-center justify-center">
+                  5
+                </span>
+                <div>
+                  <p className="font-bold text-slate-800">Paste here and save</p>
+                  <p className="mt-0.5">
+                    Fill <strong>api_id</strong>, <strong>api_hash</strong>, and <strong>StringSession</strong> below → click{' '}
+                    <strong>Save All Preferences</strong>. Status should turn green. Then go to{' '}
+                    <strong>Telegram</strong> in the sidebar, add a keyword, and click Scan.
+                  </p>
+                </div>
+              </li>
             </ol>
+            <p className="mt-4 text-[11px] text-slate-400 border-t border-slate-200 pt-3">
+              Tip: keep api_hash and StringSession private (like passwords). For production you can also set{' '}
+              <code className="bg-white px-1 rounded border">TELEGRAM_API_ID</code>,{' '}
+              <code className="bg-white px-1 rounded border">TELEGRAM_API_HASH</code>, and{' '}
+              <code className="bg-white px-1 rounded border">TELEGRAM_SESSION</code> on Railway.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                App api_id
+              </label>
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="From my.telegram.org → App api_id"
+                value={telegramApiId}
+                onChange={(e) => setTelegramApiId(e.target.value)}
+                className="input-field text-sm font-mono"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                App api_hash {telegramHasApiHash && !telegramApiHash ? `(saved: ${telegramApiHashHint})` : ''}
+              </label>
+              <input
+                type="password"
+                placeholder={telegramHasApiHash ? 'Leave blank to keep current hash' : 'From my.telegram.org → App api_hash'}
+                value={telegramApiHash}
+                onChange={(e) => setTelegramApiHash(e.target.value)}
+                className="input-field text-sm font-mono"
+              />
+            </div>
           </div>
 
           <div className="flex flex-col gap-2">
             <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">
-              Paste new StringSession (leave blank to keep current)
+              StringSession {telegramHasSession && !telegramSession ? `(saved: ${telegramSessionHint})` : ''}
             </label>
             <textarea
               rows={3}
-              placeholder="1BVtsOHwBu..."
+              placeholder={
+                telegramHasSession
+                  ? 'Leave blank to keep current session — or paste a new one'
+                  : 'Paste the long string printed by: npm run telegram:login'
+              }
               value={telegramSession}
               onChange={(e) => setTelegramSession(e.target.value)}
               className="input-field text-xs font-mono"
             />
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Treat this like a password. Only public groups/channels can be discovered by keyword search.
-            </p>
           </div>
         </div>
 

@@ -3,10 +3,26 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/db';
 
-function maskSession(session: string | null | undefined): string {
-  if (!session) return '';
-  if (session.length <= 12) return '••••••••';
-  return `${session.slice(0, 6)}…${session.slice(-4)}`;
+function maskSecret(value: string | null | undefined): string {
+  if (!value) return '';
+  if (value.length <= 12) return '••••••••';
+  return `${value.slice(0, 6)}…${value.slice(-4)}`;
+}
+
+function resolveTelegramConfig(user: {
+  telegramApiId?: string | null;
+  telegramApiHash?: string | null;
+  telegramSession?: string | null;
+}) {
+  const apiId = (user.telegramApiId || process.env.TELEGRAM_API_ID || '').trim();
+  const apiHash = (user.telegramApiHash || process.env.TELEGRAM_API_HASH || '').trim();
+  const session = (user.telegramSession || process.env.TELEGRAM_SESSION || '').trim();
+  return {
+    apiId,
+    apiHash,
+    session,
+    connected: !!(apiId && apiHash && session),
+  };
 }
 
 export async function GET() {
@@ -28,12 +44,15 @@ export async function GET() {
         metaAccessToken: '',
         slackWebhookUrl: '',
         discordWebhookUrl: '',
+        telegramApiId: '',
+        telegramApiHash: '',
         telegramConnected: false,
         telegramSessionHint: '',
+        telegramApiHashHint: '',
       });
     }
 
-    const hasSession = !!(user.telegramSession || process.env.TELEGRAM_SESSION);
+    const tg = resolveTelegramConfig(user);
 
     return NextResponse.json({
       email: user.email,
@@ -42,8 +61,15 @@ export async function GET() {
       metaAccessToken: user.metaAccessToken || '',
       slackWebhookUrl: user.slackWebhookUrl || '',
       discordWebhookUrl: user.discordWebhookUrl || '',
-      telegramConnected: hasSession,
-      telegramSessionHint: maskSession(user.telegramSession || process.env.TELEGRAM_SESSION),
+      // API ID is not highly sensitive — return stored (or env) for editing
+      telegramApiId: tg.apiId,
+      // Don't return full hash/session; hints only
+      telegramApiHash: '',
+      telegramApiHashHint: maskSecret(tg.apiHash),
+      telegramConnected: tg.connected,
+      telegramSessionHint: maskSecret(tg.session),
+      telegramHasApiHash: !!tg.apiHash,
+      telegramHasSession: !!tg.session,
     });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch user settings' }, { status: 500 });
@@ -60,6 +86,8 @@ export async function POST(req: Request) {
       metaAccessToken,
       slackWebhookUrl,
       discordWebhookUrl,
+      telegramApiId,
+      telegramApiHash,
       telegramSession,
     } = body;
 
@@ -85,10 +113,18 @@ export async function POST(req: Request) {
         discordWebhookUrl !== undefined ? discordWebhookUrl : user.discordWebhookUrl,
     };
 
-    if (telegramSession !== undefined) {
-      const trimmed = String(telegramSession || '').trim();
-      // Empty string clears DB session (env TELEGRAM_SESSION can still apply)
-      data.telegramSession = trimmed || null;
+    if (telegramApiId !== undefined) {
+      const trimmed = String(telegramApiId || '').trim();
+      data.telegramApiId = trimmed || null;
+    }
+
+    // Only update hash/session when user sends a non-empty new value
+    if (typeof telegramApiHash === 'string' && telegramApiHash.trim()) {
+      data.telegramApiHash = telegramApiHash.trim();
+    }
+
+    if (typeof telegramSession === 'string' && telegramSession.trim()) {
+      data.telegramSession = telegramSession.trim();
     }
 
     const updatedUser = await prisma.user.update({
@@ -96,7 +132,7 @@ export async function POST(req: Request) {
       data,
     });
 
-    const hasSession = !!(updatedUser.telegramSession || process.env.TELEGRAM_SESSION);
+    const tg = resolveTelegramConfig(updatedUser);
 
     return NextResponse.json({
       success: true,
@@ -105,8 +141,13 @@ export async function POST(req: Request) {
       metaAccessToken: updatedUser.metaAccessToken,
       slackWebhookUrl: updatedUser.slackWebhookUrl,
       discordWebhookUrl: updatedUser.discordWebhookUrl,
-      telegramConnected: hasSession,
-      telegramSessionHint: maskSession(updatedUser.telegramSession || process.env.TELEGRAM_SESSION),
+      telegramApiId: tg.apiId,
+      telegramApiHash: '',
+      telegramApiHashHint: maskSecret(tg.apiHash),
+      telegramConnected: tg.connected,
+      telegramSessionHint: maskSecret(tg.session),
+      telegramHasApiHash: !!tg.apiHash,
+      telegramHasSession: !!tg.session,
     });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to save settings' }, { status: 500 });
